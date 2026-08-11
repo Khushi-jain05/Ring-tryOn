@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+/**
+ * Palette: warm ivory paper, near-black ink, and a single champagne-gold accent.
+ * Jewellery photography is mostly neutral, so the interface stays neutral too
+ * and lets the metal be the only saturated thing on the page.
+ */
+:root {
+  --background: #fbfaf7;
+  --foreground: #16150f;
+  --surface: #ffffff;
+  --surface-muted: #f3f1eb;
+  --border: #e3e0d6;
+  --muted: #6f6a5c;
+  --accent: #a08343;
+  --accent-soft: #f0e6cf;
+  --accent-contrast: #1a1710;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-line: var(--border);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-contrast: var(--accent-contrast);
+
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-cormorant);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0c0c0e;
+    --foreground: #f2f0ea;
+    --surface: #151518;
+    --surface-muted: #1c1c20;
+    --border: #2a2a30;
+    --muted: #9b968c;
+    --accent: #d9bd7e;
+    --accent-soft: #2a2418;
+    --accent-contrast: #17140d;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The studio's video and canvas must never be able to widen the page. */
+html,
+body {
+  overflow-x: hidden;
+}
+
+@utility font-display {
+  font-family: var(--font-cormorant), ui-serif, Georgia, serif;
+  font-weight: 300;
+  letter-spacing: -0.015em;
+}
+
+/* A hairline rule that reads as engraved rather than drawn. */
+@utility rule {
+  background-image: linear-gradient(
+    to right,
+    transparent,
+    var(--color-line) 12%,
+    var(--color-line) 88%,
+    transparent
+  );
+  height: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
