@@ -17,12 +17,27 @@ import path from "node:path";
 
 const WASM_SRC = "node_modules/@mediapipe/tasks-vision/wasm";
 const WASM_DEST = "public/mediapipe/wasm";
-const MODEL_DEST = "public/mediapipe/models/hand_landmarker.task";
-const MODEL_URL =
-  "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
-
-/** Roughly the real size, so a truncated download is treated as missing. */
-const MODEL_MIN_BYTES = 5_000_000;
+const MODELS = [
+  {
+    name: "hand landmarker",
+    dest: "public/mediapipe/models/hand_landmarker.task",
+    url: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+    // Roughly the real size, so a truncated download is treated as missing.
+    minBytes: 5_000_000,
+    approx: "7.5 MB",
+  },
+  {
+    // Necklaces sit on the neck and chest, which the hand model cannot see. The
+    // "lite" pose model is used deliberately: a necklace only needs the shoulder
+    // line and the head's direction, and lite is a third the size of full for
+    // no loss on those particular landmarks.
+    name: "pose landmarker",
+    dest: "public/mediapipe/models/pose_landmarker_lite.task",
+    url: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+    minBytes: 3_000_000,
+    approx: "5.5 MB",
+  },
+];
 
 async function exists(target, minBytes = 1) {
   try {
@@ -56,25 +71,25 @@ async function copyWasm() {
   );
 }
 
-async function fetchModel() {
-  if (await exists(MODEL_DEST, MODEL_MIN_BYTES)) {
-    console.log("[mediapipe] hand landmarker model already in place");
+async function fetchModel(model) {
+  if (await exists(model.dest, model.minBytes)) {
+    console.log(`[mediapipe] ${model.name} model already in place`);
     return;
   }
-  await mkdir(path.dirname(MODEL_DEST), { recursive: true });
-  console.log("[mediapipe] downloading hand landmarker model (~7.5 MB)…");
+  await mkdir(path.dirname(model.dest), { recursive: true });
+  console.log(`[mediapipe] downloading ${model.name} model (~${model.approx})…`);
 
-  const response = await fetch(MODEL_URL);
+  const response = await fetch(model.url);
   if (!response.ok || !response.body) {
-    throw new Error(`model download failed: HTTP ${response.status}`);
+    throw new Error(`${model.name} download failed: HTTP ${response.status}`);
   }
-  await pipeline(Readable.fromWeb(response.body), createWriteStream(MODEL_DEST));
-  console.log(`[mediapipe] saved ${MODEL_DEST}`);
+  await pipeline(Readable.fromWeb(response.body), createWriteStream(model.dest));
+  console.log(`[mediapipe] saved ${model.dest}`);
 }
 
 try {
   await copyWasm();
-  await fetchModel();
+  for (const model of MODELS) await fetchModel(model);
 } catch (error) {
   // A missing model breaks the try-on but not the build, and failing the whole
   // install over a network hiccup is worse than a loud warning.
