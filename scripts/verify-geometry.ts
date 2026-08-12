@@ -13,6 +13,12 @@ import { RINGS } from "../src/lib/rings/catalog";
 import { createBandGeometry, createGemGeometry } from "../src/lib/rings/geometry";
 import { createFloralGeometry, DEFAULT_FLORAL } from "../src/lib/rings/floral";
 import type { GemCut } from "../src/lib/rings/types";
+import {
+  INFINITY_HEART,
+  buildChainLink,
+  buildNecklaceGeometry,
+  chainLinkPlacements,
+} from "../src/lib/jewellery/necklace";
 
 let failures = 0;
 
@@ -23,6 +29,11 @@ function fail(message: string) {
 
 function pass(message: string) {
   console.log(`PASS  ${message}`);
+}
+
+function checkTrue(label: string, value: boolean) {
+  if (!value) failures++;
+  console.log(`${value ? "PASS" : "FAIL"}  ${label}`);
 }
 
 type Stats = {
@@ -193,6 +204,95 @@ for (const ring of RINGS.filter((r) => r.design.setting === "floral")) {
   } else {
     pass(`${ring.name}: petals start at y=${minY.toFixed(2)} (band outer ${bandOuter.toFixed(2)})`);
   }
+}
+
+console.log("\n— Necklace ———————————————————————————————————————");
+
+{
+  const spec = INFINITY_HEART;
+  const built = buildNecklaceGeometry(spec);
+
+  for (const [name, geo] of [
+    ["polished ribbon + bail", built.polished],
+    ["pavé strand", built.paveRail],
+    ["heart stone", built.heart.geometry],
+  ] as const) {
+    const stats = analyse(geo);
+    if (stats.nonFinite > 0) fail(`${name}: ${stats.nonFinite} non-finite triangles`);
+    else if (stats.degenerate > 0)
+      fail(`${name}: ${stats.degenerate}/${stats.triangles} degenerate triangles`);
+    else if (stats.volume <= 0)
+      fail(`${name}: encloses ${stats.volume.toFixed(4)} volume — winding is inverted`);
+    else
+      pass(`${name}: ${stats.triangles} triangles, volume ${stats.volume.toFixed(3)}`);
+  }
+
+  // The two strands are one helix half a turn apart, so they must genuinely pass
+  // on opposite sides in depth where they cross. If they meet at the same Z the
+  // twist reads as two lines touching, and the depth buffer picks a winner
+  // arbitrarily as the view changes.
+  const plain = built.polished;
+  plain.computeBoundingBox();
+  const pave = built.paveRail;
+  pave.computeBoundingBox();
+  const plainZ = plain.boundingBox!;
+  const paveZ = pave.boundingBox!;
+  const zSpread = Math.min(plainZ.max.z - plainZ.min.z, paveZ.max.z - paveZ.min.z);
+  console.log(`       strand depth range: ${zSpread.toFixed(2)} mm`);
+  checkTrue(
+    "the twist's strands separate in depth, so the crossing is a real over-under",
+    zSpread > spec.ribbonRadiusMm * 2,
+  );
+
+  // The heart has to sit inside the frame the strands sweep, not outside it.
+  const heartY = built.heart.position[1];
+  checkTrue(
+    "the heart hangs within the pendant's drop",
+    heartY < 0 && heartY > -spec.dropMm,
+  );
+
+  // Pavé stones must sit on the strand, not float off it. Every stone is checked
+  // against the nearest point on its own rail.
+  const rail = pave.attributes.position;
+  let worstGap = 0;
+  for (const stone of built.pave) {
+    let nearest = Infinity;
+    for (let i = 0; i < rail.count; i++) {
+      const dx = rail.getX(i) - stone.position[0];
+      const dy = rail.getY(i) - stone.position[1];
+      const dz = rail.getZ(i) - stone.position[2];
+      nearest = Math.min(nearest, Math.hypot(dx, dy, dz));
+    }
+    worstGap = Math.max(worstGap, nearest);
+  }
+  console.log(`       worst pavé stone gap from its rail: ${worstGap.toFixed(3)} mm`);
+  checkTrue("every pavé stone is seated on the strand", worstGap < spec.paveRadiusMm * 2.5);
+
+  // Chain: links have to overlap, or the chain reads as loose beads.
+  const links = chainLinkPlacements(7.2, 15.5, spec.chainLinkMm, 1);
+  let maxStep = 0;
+  for (let i = 1; i < links.length; i++) {
+    const a = links[i - 1].position;
+    const b = links[i].position;
+    maxStep = Math.max(maxStep, Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]));
+  }
+  console.log(`       ${links.length} links, widest gap ${maxStep.toFixed(2)} mm`);
+  checkTrue("consecutive chain links overlap", maxStep < spec.chainLinkMm);
+
+  // A chain link has to be a closed ring, or the chain reads as a row of dashes.
+  const linkStats = analyse(buildChainLink(spec));
+  if (linkStats.nonFinite > 0 || linkStats.volume <= 0) {
+    fail(`chain link: ${linkStats.nonFinite} non-finite, volume ${linkStats.volume.toFixed(4)}`);
+  } else {
+    pass(`chain link: ${linkStats.triangles} triangles, volume ${linkStats.volume.toFixed(4)}`);
+  }
+
+  // The chain must dip at the front and hug the neck at the nape, or the pendant
+  // ends up under the chin.
+  const front = links.reduce((lo, l) => Math.min(lo, l.position[1]), 0);
+  const nape = links[0].position[1];
+  console.log(`       chain dips to ${front.toFixed(1)} mm at the front, ${nape.toFixed(1)} mm at the nape`);
+  checkTrue("the chain hangs at the front and not at the nape", front < -10 && nape > -3);
 }
 
 console.log(

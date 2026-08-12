@@ -77,6 +77,17 @@ export const GEMS: Record<GemId, Gem> = {
     dispersion: 0.6,
     roughness: 0.03,
   },
+  aquamarine: {
+    id: "aquamarine",
+    label: "Aquamarine",
+    // A pale, faintly green-leaning blue — the beryl in the reference pendant,
+    // not the deeper blue of a topaz.
+    color: "#a8ccd6",
+    ior: 1.577,
+    transmission: 0.94,
+    dispersion: 0.5,
+    roughness: 0.02,
+  },
   onyx: {
     id: "onyx",
     label: "Black Onyx",

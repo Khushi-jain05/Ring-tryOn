@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { FINGER_LABELS, type FingerName } from "@/lib/hand/landmarks";
 import { GEMS, METALS, RINGS, getRing } from "@/lib/rings/catalog";
 import { MAX_ZOOM, MIN_ZOOM } from "@/lib/hand/framing";
+import { NECKLACES, getNecklace } from "@/lib/jewellery/catalog";
 import { useTryOnStore } from "@/lib/store/tryon";
 import type { MetalId } from "@/lib/rings/types";
 import { TryOnStage } from "./TryOnStage";
@@ -33,9 +34,30 @@ export function TryOnStudio() {
   }, [metalParam, setMetal]);
 
   const ring = getRing(store.ringId) ?? RINGS[0];
+  const necklace = getNecklace(store.necklaceId) ?? NECKLACES[0];
+  const isNecklace = store.mode === "necklace";
+  // The two share a description block, a metal picker and a stone label; only the
+  // sizing and placement controls below differ.
+  const piece = isNecklace ? necklace : ring;
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8 lg:py-10">
+      {/*
+        A real mode switch, not a filter over one catalogue. Rings are tracked by
+        the hand model and necklaces by the pose model, so the two share the
+        composited stage and almost nothing else — including what "size" means.
+      */}
+      <div className="mx-auto mb-6 max-w-xs">
+        <Segmented
+          options={[
+            { value: "ring", label: "Rings" },
+            { value: "necklace", label: "Necklaces" },
+          ]}
+          value={store.mode}
+          onChange={(v) => store.setMode(v as "ring" | "necklace")}
+        />
+      </div>
+
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_366px]">
         <div>
           <TryOnStage ring={ring} />
@@ -59,30 +81,42 @@ export function TryOnStudio() {
 
           <div className="mt-6">
             <p className="text-xs uppercase tracking-[0.16em] text-muted">
-              Choose a ring
+              {isNecklace ? "Choose a necklace" : "Choose a ring"}
             </p>
             <div className="-mx-5 mt-3 flex snap-x gap-3 overflow-x-auto px-5 pb-2 sm:mx-0 sm:px-0">
-              {RINGS.map((r) => {
-                const active = r.id === ring.id;
-                return (
-                  <button
-                    key={r.id}
-                    type="button"
-                    onClick={() => store.setRing(r.id)}
-                    aria-pressed={active}
-                    className={`w-32 shrink-0 snap-start rounded-xl border px-3 py-2.5 text-left transition ${
-                      active
-                        ? "border-accent bg-accent-soft/50"
-                        : "border-line hover:border-muted"
-                    }`}
-                  >
-                    <span className="block truncate font-display text-sm">{r.name}</span>
-                    <span className="mt-0.5 block text-[10px] uppercase tracking-[0.1em] text-muted">
-                      {r.collection}
-                    </span>
-                  </button>
-                );
-              })}
+              {(isNecklace
+                ? NECKLACES.map((n) => ({
+                    id: n.id,
+                    name: n.name,
+                    collection: n.collection,
+                    select: () => store.setNecklace(n.id),
+                    active: n.id === necklace.id,
+                  }))
+                : RINGS.map((r) => ({
+                    id: r.id,
+                    name: r.name,
+                    collection: r.collection,
+                    select: () => store.setRing(r.id),
+                    active: r.id === ring.id,
+                  }))
+              ).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={item.select}
+                  aria-pressed={item.active}
+                  className={`w-32 shrink-0 snap-start rounded-xl border px-3 py-2.5 text-left transition ${
+                    item.active
+                      ? "border-accent bg-accent-soft/50"
+                      : "border-line hover:border-muted"
+                  }`}
+                >
+                  <span className="block truncate font-display text-sm">{item.name}</span>
+                  <span className="mt-0.5 block text-[10px] uppercase tracking-[0.1em] text-muted">
+                    {item.collection}
+                  </span>
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -90,19 +124,19 @@ export function TryOnStudio() {
         <aside className="space-y-6">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-accent">
-              {ring.collection}
+              {piece.collection}
             </p>
-            <h1 className="mt-1.5 font-display text-3xl">{ring.name}</h1>
+            <h1 className="mt-1.5 font-display text-3xl">{piece.name}</h1>
             <p className="mt-1 text-xs text-muted">
-              {GEMS[ring.gem].label}
-              {ring.carat ? ` · ${ring.carat.toFixed(2)} ct` : ""}
+              {GEMS[piece.gem].label}
+              {piece.carat ? ` · ${piece.carat.toFixed(2)} ct` : ""}
             </p>
-            <p className="mt-3 text-sm leading-relaxed text-muted">{ring.description}</p>
+            <p className="mt-3 text-sm leading-relaxed text-muted">{piece.description}</p>
           </div>
 
           <Field label="Metal">
             <div className="flex flex-wrap gap-2">
-              {ring.metals.map((id) => {
+              {piece.metals.map((id) => {
                 const spec = METALS[id];
                 const active = id === store.metal;
                 return (
@@ -128,15 +162,69 @@ export function TryOnStudio() {
             </div>
           </Field>
 
-          <Field label="Finger">
-            <Segmented
-              options={FINGERS.map((f) => ({ value: f, label: FINGER_LABELS[f] }))}
-              value={store.anchor.finger}
-              onChange={(v) => store.setFinger(v as FingerName)}
-            />
-          </Field>
+          {isNecklace ? (
+            <div className="space-y-5 rounded-2xl border border-line bg-surface-muted/40 p-5">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted">
+                  Measured from your shoulders
+                </p>
+                <p className="mt-2 text-sm">
+                  Neck <span className="tabular-nums">{(store.neckSizeMm * 2).toFixed(0)} mm</span>{" "}
+                  across
+                </p>
+                <p className="mt-1.5 text-xs leading-relaxed text-muted">
+                  A necklace is sized from shoulder breadth rather than from a
+                  ruler — the pose model reports it in real millimetres, so the
+                  chain is laid to your own neck and the pendant lands where it
+                  actually would.
+                </p>
+              </div>
 
-          <SizePanel />
+              <Slider
+                label="Chain length"
+                value={store.necklaceAnchor.dropFactor}
+                min={1.4}
+                max={3.6}
+                step={0.05}
+                format={(v) =>
+                  v < 1.9 ? "Choker" : v > 2.9 ? "Long" : "Princess"
+                }
+                onChange={(v) => store.setNecklaceAnchor({ dropFactor: v })}
+              />
+              <Slider
+                label="Piece size"
+                value={store.necklaceAnchor.sizeMultiplier}
+                min={0.85}
+                max={1.2}
+                step={0.01}
+                format={(v) => `${Math.round(v * 100)}%`}
+                onChange={(v) => store.setNecklaceAnchor({ sizeMultiplier: v })}
+              />
+              <Slider
+                label="Sits higher or lower"
+                value={store.necklaceAnchor.riseOffset}
+                min={-1.4}
+                max={1.4}
+                step={0.05}
+                format={(v) =>
+                  Math.abs(v) < 0.1 ? "At the notch" : v > 0 ? "Higher" : "Lower"
+                }
+                onChange={(v) => store.setNecklaceAnchor({ riseOffset: v })}
+              />
+            </div>
+          ) : (
+            <>
+              <Field label="Finger">
+                <Segmented
+                  options={FINGERS.map((f) => ({ value: f, label: FINGER_LABELS[f] }))}
+                  value={store.anchor.finger}
+                  onChange={(v) => store.setFinger(v as FingerName)}
+                />
+              </Field>
+
+              <SizePanel />
+            </>
+          )}
 
           <div className="rounded-2xl border border-line p-4">
             <button
@@ -151,50 +239,54 @@ export function TryOnStudio() {
 
             {advanced && (
               <div className="mt-5 space-y-5">
-                <Slider
-                  label="Position along finger"
-                  value={store.anchor.positionAlongFinger}
-                  min={0.1}
-                  max={0.72}
-                  step={0.01}
-                  format={(v) =>
-                    v < 0.3 ? "At the knuckle" : v > 0.56 ? "High" : "Standard"
-                  }
-                  onChange={(v) => store.setAnchor({ positionAlongFinger: v })}
-                />
-                <Slider
-                  label="Ring width"
-                  value={store.anchor.widthMultiplier}
-                  min={0.85}
-                  max={1.2}
-                  step={0.01}
-                  format={(v) => `${Math.round(v * 100)}% of fit`}
-                  onChange={(v) => store.setAnchor({ widthMultiplier: v })}
-                />
-                <Slider
-                  label="Turn the setting"
-                  value={store.anchor.rotationOffset}
-                  min={-Math.PI}
-                  max={Math.PI}
-                  step={0.02}
-                  format={(v) => `${Math.round((v * 180) / Math.PI)}\u00b0`}
-                  onChange={(v) => store.setAnchor({ rotationOffset: v })}
-                />
-                <Slider
-                  label="Band across finger"
-                  value={store.anchor.crossOffset}
-                  min={-0.3}
-                  max={0.3}
-                  step={0.01}
-                  format={(v) =>
-                    Math.abs(v) < 0.02
-                      ? "Centred"
-                      : v > 0
-                        ? "Toward the back of the hand"
-                        : "Toward the palm"
-                  }
-                  onChange={(v) => store.setAnchor({ crossOffset: v })}
-                />
+                {!isNecklace && (
+                  <>
+                    <Slider
+                      label="Position along finger"
+                      value={store.anchor.positionAlongFinger}
+                      min={0.1}
+                      max={0.72}
+                      step={0.01}
+                      format={(v) =>
+                        v < 0.3 ? "At the knuckle" : v > 0.56 ? "High" : "Standard"
+                      }
+                      onChange={(v) => store.setAnchor({ positionAlongFinger: v })}
+                    />
+                    <Slider
+                      label="Ring width"
+                      value={store.anchor.widthMultiplier}
+                      min={0.85}
+                      max={1.2}
+                      step={0.01}
+                      format={(v) => `${Math.round(v * 100)}% of fit`}
+                      onChange={(v) => store.setAnchor({ widthMultiplier: v })}
+                    />
+                    <Slider
+                      label="Turn the setting"
+                      value={store.anchor.rotationOffset}
+                      min={-Math.PI}
+                      max={Math.PI}
+                      step={0.02}
+                      format={(v) => `${Math.round((v * 180) / Math.PI)}\u00b0`}
+                      onChange={(v) => store.setAnchor({ rotationOffset: v })}
+                    />
+                    <Slider
+                      label="Band across finger"
+                      value={store.anchor.crossOffset}
+                      min={-0.3}
+                      max={0.3}
+                      step={0.01}
+                      format={(v) =>
+                        Math.abs(v) < 0.02
+                          ? "Centred"
+                          : v > 0
+                            ? "Toward the back of the hand"
+                            : "Toward the palm"
+                      }
+                      onChange={(v) => store.setAnchor({ crossOffset: v })}
+                    />
+                  </>
+                )}
                 <Slider
                   label="Smoothing"
                   value={store.smoothing.minCutoff}
@@ -210,28 +302,32 @@ export function TryOnStudio() {
                   checked={store.mirrored}
                   onChange={store.toggleMirrored}
                 />
-                <Toggle
-                  label="Keep the stone facing me"
-                  hint={
-                    store.settingFacesCamera
-                      ? "The setting stays turned toward you as you rotate your hand"
-                      : "The setting rides round with your hand, as a real ring does"
-                  }
-                  checked={store.settingFacesCamera}
-                  onChange={store.toggleSettingFacesCamera}
-                />
-                <Toggle
-                  label="Setting facing the wrong way?"
-                  hint="Flips the flower or stone to the other side of the finger"
-                  checked={store.flipGem}
-                  onChange={store.toggleFlipGem}
-                />
-                <Toggle
-                  label="Measure my finger from the video"
-                  hint="Experimental. More exact when it works, but it can mistake a crease for your finger's edge and undersize the ring."
-                  checked={store.usePixelProbe}
-                  onChange={store.togglePixelProbe}
-                />
+                {!isNecklace && (
+                  <>
+                    <Toggle
+                      label="Keep the stone facing me"
+                      hint={
+                        store.settingFacesCamera
+                          ? "The setting stays turned toward you as you rotate your hand"
+                          : "The setting rides round with your hand, as a real ring does"
+                      }
+                      checked={store.settingFacesCamera}
+                      onChange={store.toggleSettingFacesCamera}
+                    />
+                    <Toggle
+                      label="Setting facing the wrong way?"
+                      hint="Flips the flower or stone to the other side of the finger"
+                      checked={store.flipGem}
+                      onChange={store.toggleFlipGem}
+                    />
+                    <Toggle
+                      label="Measure my finger from the video"
+                      hint="Experimental. More exact when it works, but it can mistake a crease for your finger's edge and undersize the ring."
+                      checked={store.usePixelProbe}
+                      onChange={store.togglePixelProbe}
+                    />
+                  </>
+                )}
                 <Toggle
                   label="Show diagnostics"
                   checked={store.showDiagnostics}
@@ -242,11 +338,9 @@ export function TryOnStudio() {
           </div>
 
           <p className="text-xs leading-relaxed text-muted">
-            Hold your hand in the middle of the frame, 30–50 cm from the camera
-            in even light, with the whole hand visible. The view is a fixed crop
-            rather than one that follows you, so nothing moves but your hand. The
-            size is measured from your hand&rsquo;s real proportions, so keep the
-            palm roughly square to the lens while it settles.{" "}
+            {isNecklace
+              ? "Sit back far enough that both shoulders are in frame — the chain is sized from your shoulder breadth, so the piece hides until both are visible. Face the camera squarely while it settles."
+              : "Hold your hand in the middle of the frame, 30–50 cm from the camera in even light, with the whole hand visible. The view is a fixed crop rather than one that follows you, so nothing moves but your hand. The size is measured from your hand’s real proportions, so keep the palm roughly square to the lens while it settles."}{" "}
             <Link href="/about" className="text-accent underline-offset-4 hover:underline">
               How this works
             </Link>

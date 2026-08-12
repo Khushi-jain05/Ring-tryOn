@@ -5,6 +5,10 @@ import { persist } from "zustand/middleware";
 import { DEFAULT_ONE_EURO, type OneEuroConfig } from "@/lib/hand/oneEuro";
 import type { FingerName } from "@/lib/hand/landmarks";
 import { anchorFor, type RingAnchor } from "@/lib/hand/anchor";
+import {
+  DEFAULT_NECKLACE_ANCHOR,
+  type NecklaceAnchor,
+} from "@/lib/neck/necklacePose";
 import { RINGS } from "@/lib/rings/catalog";
 import { DEFAULT_SIZE, sizeToDiameterMm, snapToStockSize } from "@/lib/rings/sizes";
 import type { MetalId } from "@/lib/rings/types";
@@ -35,8 +39,13 @@ type Persisted = {
   calibrationSource: CalibrationSource;
 };
 
+/** Which piece is being tried on. The two use different tracking models. */
+export type TryOnMode = "ring" | "necklace";
+
 type TryOnState = Persisted & {
+  mode: TryOnMode;
   ringId: string;
+  necklaceId: string;
   metal: MetalId;
   finger: FingerName;
 
@@ -53,6 +62,10 @@ type TryOnState = Persisted & {
 
   /** Where the ring sits, in finger-relative terms. Never screen coordinates. */
   anchor: RingAnchor;
+  /** Where the necklace sits, in neck-relative terms. */
+  necklaceAnchor: NecklaceAnchor;
+  /** Measured neck radius in millimetres; drives how the chain is laid. */
+  neckSizeMm: number;
   mirrored: boolean;
   flipGem: boolean;
   /** Fixed magnification of the centre of the frame, 1 being uncropped. */
@@ -91,6 +104,10 @@ type TryOnState = Persisted & {
   calibrateToKnownSize: (knownSize: number) => void;
   resetCalibration: () => void;
   setAnchor: (patch: Partial<RingAnchor>) => void;
+  setMode: (mode: TryOnMode) => void;
+  setNecklace: (necklaceId: string) => void;
+  setNecklaceAnchor: (patch: Partial<NecklaceAnchor>) => void;
+  setNeckSizeMm: (mm: number) => void;
   toggleMirrored: () => void;
   toggleFlipGem: () => void;
   setZoom: (zoom: number) => void;
@@ -105,7 +122,9 @@ type TryOnState = Persisted & {
 export const useTryOnStore = create<TryOnState>()(
   persist(
     (set, get) => ({
+      mode: "ring",
       ringId: RINGS[0].id,
+      necklaceId: "infinity-heart",
       metal: RINGS[0].metals[0],
       finger: "ring",
 
@@ -118,6 +137,8 @@ export const useTryOnStore = create<TryOnState>()(
       calibratingWithCard: false,
 
       anchor: anchorFor("ring"),
+      necklaceAnchor: DEFAULT_NECKLACE_ANCHOR,
+      neckSizeMm: 57,
       mirrored: true,
       flipGem: false,
       zoom: 1.7,
@@ -211,6 +232,14 @@ export const useTryOnStore = create<TryOnState>()(
         }),
 
       setAnchor: (patch) => set((s) => ({ anchor: { ...s.anchor, ...patch } })),
+      setMode: (mode) =>
+        // Switching piece switches tracking model, so nothing measured for the
+        // old one carries over.
+        set({ mode, status: "loading-model", reading: null, sizeAdopted: false }),
+      setNecklace: (necklaceId) => set({ necklaceId }),
+      setNecklaceAnchor: (patch) =>
+        set((s) => ({ necklaceAnchor: { ...s.necklaceAnchor, ...patch } })),
+      setNeckSizeMm: (neckSizeMm) => set({ neckSizeMm }),
       toggleMirrored: () => set((s) => ({ mirrored: !s.mirrored })),
       toggleFlipGem: () => set((s) => ({ flipGem: !s.flipGem })),
       setZoom: (zoom) => set({ zoom }),

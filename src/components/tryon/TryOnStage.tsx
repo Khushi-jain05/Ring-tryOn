@@ -7,6 +7,8 @@ import { ANCHOR_DISTANCE, CAMERA_FOV } from "@/lib/hand/projection";
 import { fixedFraming, framingTransform } from "@/lib/hand/framing";
 import { StudioEnvironment } from "@/components/three/StudioEnvironment";
 import { TrackedRing } from "@/components/three/TrackedRing";
+import { TrackedNecklace } from "@/components/three/TrackedNecklace";
+import { getNecklace, NECKLACES } from "@/lib/jewellery/catalog";
 import { useTryOnStore } from "@/lib/store/tryon";
 import type { Ring } from "@/lib/rings/types";
 import { useCamera } from "./useCamera";
@@ -26,6 +28,9 @@ import { CardCalibration } from "./CardCalibration";
  * "fractions of the frame height" landing on the right pixels.
  */
 export function TryOnStage({ ring }: { ring: Ring }) {
+  const mode = useTryOnStore((s) => s.mode);
+  const necklaceId = useTryOnStore((s) => s.necklaceId);
+  const necklace = getNecklace(necklaceId) ?? NECKLACES[0];
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const glRef = useRef<HTMLCanvasElement | null>(null);
@@ -35,6 +40,7 @@ export function TryOnStage({ ring }: { ring: Ring }) {
   const camera = useCamera(videoRef);
   const mirrored = useTryOnStore((s) => s.mirrored);
   const zoom = useTryOnStore((s) => s.zoom);
+  const metal = useTryOnStore((s) => s.metal);
   const setStatus = useTryOnStore((s) => s.setStatus);
 
   useEffect(() => {
@@ -164,7 +170,11 @@ export function TryOnStage({ ring }: { ring: Ring }) {
         <directionalLight position={[0.4, 0.7, 1.2]} intensity={1.5} />
         <directionalLight position={[-0.8, -0.3, 1]} intensity={0.55} color="#dce8ff" />
         <ambientLight intensity={0.22} />
-        <TrackedRing video={videoEl} ring={ring} />
+        {mode === "ring" ? (
+          <TrackedRing video={videoEl} ring={ring} />
+        ) : (
+          <TrackedNecklace video={videoEl} metal={metal} gem={necklace.gem} />
+        )}
       </Canvas>
 
       <DebugOverlay />

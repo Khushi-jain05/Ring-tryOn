@@ -1,6 +1,13 @@
 export type MetalId = "yellow-gold" | "rose-gold" | "white-gold" | "platinum";
 
-export type GemId = "diamond" | "ruby" | "sapphire" | "emerald" | "amethyst" | "onyx";
+export type GemId =
+  | "diamond"
+  | "ruby"
+  | "sapphire"
+  | "emerald"
+  | "amethyst"
+  | "aquamarine"
+  | "onyx";
 
 export type GemCut = "round" | "princess" | "emerald" | "oval" | "pear" | "marquise";
 
