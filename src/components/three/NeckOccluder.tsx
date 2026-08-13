@@ -4,16 +4,6 @@ import { forwardRef, useMemo } from "react";
 import { CylinderGeometry, type Mesh } from "three";
 
 /**
- * How much shallower the neck is front-to-back than it is side-to-side.
- *
- * Unlike a finger under a ring, there is no metal here compressing anything into
- * a circle, so the neck's real oval section is the right model — and it matters:
- * the chain has to disappear behind the neck at the sides, which is exactly where
- * the two axes differ most.
- */
-export const NECK_FLATTEN = 0.78;
-
-/**
  * An invisible stand-in for the neck.
  *
  * A chain goes *around* something, so most of its length is behind the wearer and

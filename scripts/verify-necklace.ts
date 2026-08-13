@@ -17,6 +17,13 @@ import {
 import { PL, POSE_LANDMARK_COUNT } from "../src/lib/neck/landmarks";
 import { DEFAULT_ONE_EURO } from "../src/lib/hand/oneEuro";
 import { ANCHOR_DISTANCE, CAMERA_FOV, type FrameGeometry } from "../src/lib/hand/projection";
+import {
+  NECK_OCCLUDER,
+  occluderExtent,
+  pendantBottom,
+  pendantTop,
+} from "../src/lib/jewellery/fit";
+import { NECKLACES, dropFactorFor } from "../src/lib/jewellery/catalog";
 
 /* ------------------------------------------------------------------ */
 /* A synthetic adult upper body, in metres, facing the camera          */
@@ -304,6 +311,51 @@ const projected = {
 const drift = Math.hypot(projected.x - pose.position.x, projected.y - pose.position.y);
 console.log(`       anchor depth ${pose.anchorDepth.toFixed(4)} u, drift ${drift.toExponential(1)} u`);
 checkTrue("depth compensation preserves the screen position", drift < 1e-9);
+
+console.log("\n— The occluder must not eat the jewellery —————————");
+
+// An occluder writes depth and no colour, so one that is too long does not draw a
+// block over the pendant — the pendant simply never appears, with nothing in the
+// console to say why. This is the check for that, and it is the reason the
+// occluder's dimensions live in a module the test can read.
+{
+  const { bottom, top } = occluderExtent();
+  const neckMmMeasured = (pose.neckRadius / pose.planeScale) * 1000;
+
+  // Both lengths in the range, because they fail differently. A pendant hangs
+  // well clear of the occluder; a choker sits right at its lower rim, which is the
+  // tight case — too long an occluder deletes the strands entirely.
+  for (const necklace of NECKLACES) {
+    const drop = dropFactorFor(necklace, neckMmMeasured);
+    const lowest = -drop;
+    console.log(
+      `       ${necklace.id}: occluder rim at ${bottom.toFixed(2)} radii, piece reaches ${lowest.toFixed(2)}`,
+    );
+    checkTrue(
+      `${necklace.id} hangs below the occluder's lower rim`,
+      lowest < bottom,
+    );
+  }
+
+  const drop = DEFAULT_NECKLACE_ANCHOR.dropFactor * 2.15;
+  const bail = pendantTop(drop);
+  const tip = pendantBottom(drop, neckMmMeasured);
+  console.log(
+    `       occluder spans ${bottom.toFixed(2)} to ${top.toFixed(2)} radii; pendant spans ${bail.toFixed(2)} to ${tip.toFixed(2)}`,
+  );
+  checkTrue(
+    "the occluder's lower rim stays above the pendant's bail",
+    bottom > bail,
+  );
+  checkTrue("the occluder covers the neck above the anchor", top > 1.5);
+  // It still has to reach just below the anchor, or the chain's back run shows
+  // across the throat where it passes the notch.
+  checkTrue("the occluder reaches just below the anchor", bottom < 0);
+
+  // And the occluder must be inside the chain's path, not on it, or the two
+  // z-fight and the whole chain flickers.
+  checkTrue("the occluder sits inside the chain's path", NECK_OCCLUDER.press < 1);
+}
 
 console.log("\n— Missing shoulders ——————————————————————————————");
 

@@ -43,7 +43,31 @@ export type NecklaceSpec = {
   chainLinkMm: number;
 };
 
+/**
+ * The heavy cut of the design: a statement piece rather than a delicate one.
+ *
+ * Every dimension is up around 50% on the slender version below, and that is not
+ * only an aesthetic choice — it is also what makes the piece legible in try-on. A
+ * 19 mm pendant on someone sitting far enough back for both shoulders to be in
+ * frame is about 35 screen pixels tall, at which point neither the twist nor the
+ * cut of the stone survives. At 27 mm with a 10 mm heart and a 2 mm ribbon there
+ * is something to look at.
+ */
 export const INFINITY_HEART: NecklaceSpec = {
+  dropMm: 27,
+  heartHalfWidthMm: 5.2,
+  // A little over 2 mm of metal across the ribbon — substantial enough to carry a
+  // bright edge highlight rather than reading as wire.
+  ribbonRadiusMm: 1.05,
+  ribbonFlatten: 0.62,
+  paveRadiusMm: 0.5,
+  paveCount: 24,
+  chainWireMm: 0.52,
+  chainLinkMm: 3,
+};
+
+/** The original proportions, kept as the lighter option in the range. */
+export const INFINITY_HEART_SLENDER: NecklaceSpec = {
   dropMm: 18.5,
   heartHalfWidthMm: 3.4,
   ribbonRadiusMm: 0.62,

@@ -233,9 +233,17 @@ export const useTryOnStore = create<TryOnState>()(
 
       setAnchor: (patch) => set((s) => ({ anchor: { ...s.anchor, ...patch } })),
       setMode: (mode) =>
-        // Switching piece switches tracking model, so nothing measured for the
-        // old one carries over.
-        set({ mode, status: "loading-model", reading: null, sizeAdopted: false }),
+        // Switching piece switches tracking model, so nothing measured for the old
+        // one carries over. The framing changes too: a ring wants a tight crop on
+        // one hand, whereas a necklace is not placed at all until both shoulders
+        // are in frame, so it needs a wider view.
+        set({
+          mode,
+          status: "loading-model",
+          reading: null,
+          sizeAdopted: false,
+          zoom: mode === "necklace" ? 1.2 : 1.7,
+        }),
       setNecklace: (necklaceId) => set({ necklaceId }),
       setNecklaceAnchor: (patch) =>
         set((s) => ({ necklaceAnchor: { ...s.necklaceAnchor, ...patch } })),

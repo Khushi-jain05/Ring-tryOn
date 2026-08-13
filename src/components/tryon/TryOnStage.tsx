@@ -173,7 +173,7 @@ export function TryOnStage({ ring }: { ring: Ring }) {
         {mode === "ring" ? (
           <TrackedRing video={videoEl} ring={ring} />
         ) : (
-          <TrackedNecklace video={videoEl} metal={metal} gem={necklace.gem} />
+          <TrackedNecklace video={videoEl} metal={metal} necklace={necklace} />
         )}
       </Canvas>
 

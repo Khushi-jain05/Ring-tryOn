@@ -14,7 +14,13 @@ import { createBandGeometry, createGemGeometry } from "../src/lib/rings/geometry
 import { createFloralGeometry, DEFAULT_FLORAL } from "../src/lib/rings/floral";
 import type { GemCut } from "../src/lib/rings/types";
 import {
+  PEARL_CHOKER,
+  buildPearlNecklace,
+  chokerDropFactor,
+} from "../src/lib/jewellery/pearls";
+import {
   INFINITY_HEART,
+  INFINITY_HEART_SLENDER,
   buildChainLink,
   buildNecklaceGeometry,
   chainLinkPlacements,
@@ -208,15 +214,18 @@ for (const ring of RINGS.filter((r) => r.design.setting === "floral")) {
 
 console.log("\n— Necklace ———————————————————————————————————————");
 
-{
-  const spec = INFINITY_HEART;
+for (const [weight, spec] of [
+  ["heavy", INFINITY_HEART],
+  ["slender", INFINITY_HEART_SLENDER],
+] as const) {
   const built = buildNecklaceGeometry(spec);
 
-  for (const [name, geo] of [
+  for (const [part, geo] of [
     ["polished ribbon + bail", built.polished],
     ["pavé strand", built.paveRail],
     ["heart stone", built.heart.geometry],
   ] as const) {
+    const name = `${weight} ${part}`;
     const stats = analyse(geo);
     if (stats.nonFinite > 0) fail(`${name}: ${stats.nonFinite} non-finite triangles`);
     else if (stats.degenerate > 0)
@@ -269,30 +278,102 @@ console.log("\n— Necklace —————————————————�
   checkTrue("every pavé stone is seated on the strand", worstGap < spec.paveRadiusMm * 2.5);
 
   // Chain: links have to overlap, or the chain reads as loose beads.
-  const links = chainLinkPlacements(7.2, 15.5, spec.chainLinkMm, 1);
+  const links = chainLinkPlacements(57, 122, spec.chainLinkMm, 1);
   let maxStep = 0;
   for (let i = 1; i < links.length; i++) {
     const a = links[i - 1].position;
     const b = links[i].position;
     maxStep = Math.max(maxStep, Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]));
   }
-  console.log(`       ${links.length} links, widest gap ${maxStep.toFixed(2)} mm`);
-  checkTrue("consecutive chain links overlap", maxStep < spec.chainLinkMm);
+  console.log(`       ${weight}: ${links.length} links, widest gap ${maxStep.toFixed(2)} mm`);
+  checkTrue(`${weight} chain links overlap`, maxStep < spec.chainLinkMm);
 
   // A chain link has to be a closed ring, or the chain reads as a row of dashes.
   const linkStats = analyse(buildChainLink(spec));
   if (linkStats.nonFinite > 0 || linkStats.volume <= 0) {
-    fail(`chain link: ${linkStats.nonFinite} non-finite, volume ${linkStats.volume.toFixed(4)}`);
+    fail(`${weight} chain link: volume ${linkStats.volume.toFixed(4)}`);
   } else {
-    pass(`chain link: ${linkStats.triangles} triangles, volume ${linkStats.volume.toFixed(4)}`);
+    pass(`${weight} chain link: ${linkStats.triangles} triangles, volume ${linkStats.volume.toFixed(3)}`);
   }
 
   // The chain must dip at the front and hug the neck at the nape, or the pendant
   // ends up under the chin.
   const front = links.reduce((lo, l) => Math.min(lo, l.position[1]), 0);
   const nape = links[0].position[1];
-  console.log(`       chain dips to ${front.toFixed(1)} mm at the front, ${nape.toFixed(1)} mm at the nape`);
-  checkTrue("the chain hangs at the front and not at the nape", front < -10 && nape > -3);
+  console.log(`       ${weight}: chain dips ${front.toFixed(0)} mm at the front, ${nape.toFixed(0)} mm at the nape`);
+  checkTrue(`${weight} chain hangs at the front, not the nape`, front < -80 && nape > -6);
+
+  // "Heavy" has to actually be heavier, or the label is decorative. Compared by
+  // the volume of metal in the ribbon, which is what weight means for a pendant.
+  if (weight === "heavy") {
+    const slender = buildNecklaceGeometry(INFINITY_HEART_SLENDER);
+    const heavyVol = analyse(built.polished).volume + analyse(built.paveRail).volume;
+    const slenderVol = analyse(slender.polished).volume + analyse(slender.paveRail).volume;
+    console.log(`       metal volume: heavy ${heavyVol.toFixed(0)} mm³ vs slender ${slenderVol.toFixed(0)} mm³`);
+    checkTrue("the heavy cut carries substantially more metal", heavyVol > slenderVol * 2.5);
+  }
+}
+
+console.log("\n— Pearl choker ———————————————————————————————————");
+
+{
+  const NECK_MM = 57;
+  const spec = PEARL_CHOKER;
+  const built = buildPearlNecklace(spec, NECK_MM);
+
+  console.log(`       ${built.strands.length} strands of ${built.strands.map((s) => s.length).join(" and ")} pearls`);
+  checkTrue("both strands were built", built.strands.length === spec.strands);
+
+  for (const [i, strand] of built.strands.entries()) {
+    // Pearls have to touch. Gaps read as beads on a wire, which is what a cheap
+    // strand looks like and the one thing a pearl necklace must not.
+    let worstGap = 0;
+    for (let j = 1; j < strand.length; j++) {
+      const a = strand[j - 1];
+      const b = strand[j];
+      const centres = Math.hypot(
+        b.position[0] - a.position[0],
+        b.position[1] - a.position[1],
+        b.position[2] - a.position[2],
+      );
+      worstGap = Math.max(worstGap, centres - (a.radius + b.radius));
+    }
+    console.log(`       strand ${i}: widest gap between pearls ${worstGap.toFixed(2)} mm`);
+    checkTrue(`strand ${i} pearls touch`, worstGap < 0.6);
+  }
+
+  // Graduated: largest at the front, smallest at the nape. Getting this backwards
+  // puts the big pearls behind the neck where nobody sees them.
+  for (const [i, strand] of built.strands.entries()) {
+    const front = strand[Math.floor(strand.length / 2)].radius;
+    const nape = strand[0].radius;
+    checkTrue(`strand ${i} graduates larger toward the front`, front > nape * 1.1);
+  }
+
+  // The strands must nest, not intersect.
+  const inner = built.strands[0];
+  const outer = built.strands[1];
+  const innerFront = inner[Math.floor(inner.length / 2)];
+  const outerFront = outer[Math.floor(outer.length / 2)];
+  const separation = innerFront.position[1] - outerFront.position[1];
+  console.log(`       front strands sit ${separation.toFixed(1)} mm apart vertically`);
+  checkTrue(
+    "the outer strand hangs below the inner one without overlapping it",
+    separation > innerFront.radius + outerFront.radius * 0.6,
+  );
+
+  // The drop hangs below the lowest strand, not inside it.
+  const dropTop = built.drop.position[1] + built.drop.radius;
+  const lowestBottom = outerFront.position[1] - outerFront.radius;
+  console.log(`       drop pearl top ${dropTop.toFixed(1)} mm, lowest strand bottom ${lowestBottom.toFixed(1)} mm`);
+  checkTrue("the drop pearl hangs clear of the strands", dropTop < lowestBottom);
+  checkTrue("the drop pearl is the largest one", built.drop.radius > innerFront.radius);
+
+  // And a choker must be a choker: its whole drop is a small fraction of a neck.
+  const drop = chokerDropFactor(spec, NECK_MM);
+  console.log(`       choker drop factor ${drop.toFixed(2)} neck radii (${(drop * NECK_MM).toFixed(0)} mm)`);
+  checkTrue("a choker sits at the neck rather than hanging", drop < 0.7);
+  checkTrue("a choker still clears the neck's own anchor", drop > 0.2);
 }
 
 console.log(

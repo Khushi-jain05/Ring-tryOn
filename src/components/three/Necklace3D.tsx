@@ -5,13 +5,14 @@ import { DoubleSide, SphereGeometry } from "three";
 import { GEMS, METALS } from "@/lib/rings/catalog";
 import type { GemId, MetalId } from "@/lib/rings/types";
 import {
-  INFINITY_HEART,
   buildChainLink,
   buildNecklaceGeometry,
   chainLinkPlacements,
   type NecklaceSpec,
 } from "@/lib/jewellery/necklace";
+import type { NecklaceStyle } from "@/lib/jewellery/catalog";
 import type { RenderQuality } from "./Ring3D";
+import { PearlNecklace3D } from "./PearlNecklace3D";
 
 /**
  * The pendant and chain, authored in millimetres with the bail at the origin.
@@ -28,7 +29,7 @@ export function Necklace3D({
   quality = "showcase",
   neckRadiusMm,
   dropMm,
-  spec = INFINITY_HEART,
+  style,
 }: {
   metal: MetalId;
   gem: GemId;
@@ -37,7 +38,41 @@ export function Necklace3D({
   neckRadiusMm: number;
   /** How far the chain's lowest point hangs below the neck's base, in mm. */
   dropMm: number;
-  spec?: NecklaceSpec;
+  style: NecklaceStyle;
+}) {
+  // A strand's geometry depends on the neck it is on, so it is built rather than
+  // scaled; the pendant is a fixed model on a chain that drapes.
+  if (style.kind === "pearls") {
+    return (
+      <PearlNecklace3D spec={style.spec} neckRadiusMm={neckRadiusMm} metal={metal} />
+    );
+  }
+  return (
+    <PendantNecklace
+      metal={metal}
+      gem={gem}
+      quality={quality}
+      neckRadiusMm={neckRadiusMm}
+      dropMm={dropMm}
+      spec={style.spec}
+    />
+  );
+}
+
+function PendantNecklace({
+  metal,
+  gem,
+  quality,
+  neckRadiusMm,
+  dropMm,
+  spec,
+}: {
+  metal: MetalId;
+  gem: GemId;
+  quality: RenderQuality;
+  neckRadiusMm: number;
+  dropMm: number;
+  spec: NecklaceSpec;
 }) {
   const parts = useMemo(() => buildNecklaceGeometry(spec), [spec]);
   const link = useMemo(() => buildChainLink(spec), [spec]);

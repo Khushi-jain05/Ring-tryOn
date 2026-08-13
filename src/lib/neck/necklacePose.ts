@@ -34,8 +34,12 @@ export type NecklacePose = {
 
 export type NecklaceAnchor = {
   /**
-   * How far below the neck base the chain's lowest point hangs, as a multiple of
-   * the neck's radius. Sets the necklace's length.
+   * Trim on the piece's own length, 1 being as designed.
+   *
+   * Deliberately a multiplier and not an absolute length: a choker and a
+   * princess-length chain differ by a factor of ten, so a single absolute default
+   * would place one of them badly wrong. Each piece supplies its own drop and this
+   * only nudges it.
    */
   dropFactor: number;
   /** Scales the whole piece against the measured neck. 1 is true to size. */
@@ -45,7 +49,7 @@ export type NecklaceAnchor = {
 };
 
 export const DEFAULT_NECKLACE_ANCHOR: NecklaceAnchor = {
-  dropFactor: 2.15,
+  dropFactor: 1,
   sizeMultiplier: 1,
   riseOffset: 0,
 };

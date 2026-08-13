@@ -5,6 +5,7 @@ const GROUPS = [
     title: "Shop",
     links: [
       { href: "/rings", label: "All rings" },
+      { href: "/necklaces", label: "Necklaces" },
       { href: "/rings?collection=Bridal", label: "Bridal" },
       { href: "/rings?collection=Everyday", label: "Everyday" },
       { href: "/rings?collection=Colour", label: "Coloured stones" },
