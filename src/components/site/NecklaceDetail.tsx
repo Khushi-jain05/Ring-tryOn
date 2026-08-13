@@ -20,16 +20,13 @@ export function NecklaceDetail({
   const metals = metalOrder.filter((m) => necklace.metals.includes(m));
 
   const specs: [string, string][] =
-    necklace.style.kind === "pearls"
+    necklace.style.kind === "collar"
       ? [
-          ["Strands", String(necklace.style.spec.strands)],
-          ["Largest pearl", `${necklace.style.spec.pearlMm.toFixed(1)} mm`],
-          [
-            "Graduated to",
-            `${(necklace.style.spec.pearlMm * necklace.style.spec.gradation).toFixed(1)} mm at the nape`,
-          ],
-          ["Drop pearl", `${necklace.style.spec.dropPearlMm.toFixed(1)} mm`],
-          ["Length", "Choker — sits at the base of the neck"],
+          ["Band width", `${necklace.style.spec.bandWidthMm.toFixed(1)} mm`],
+          ["Main stones", `${necklace.style.spec.mainStoneMm.toFixed(1)} mm round`],
+          ["Clusters", `${necklace.style.spec.clusterCount}, claw-set`],
+          ["Drops", `${necklace.style.spec.dropCount} pear, ${necklace.style.spec.dropStoneMm.toFixed(1)} mm`],
+          ["Length", "Collar — follows the neckline"],
         ]
       : [
           ["Pendant height", `${necklace.style.spec.dropMm.toFixed(1)} mm`],
@@ -59,7 +56,7 @@ export function NecklaceDetail({
         </p>
         <h2 className="mt-3 font-display text-4xl">{necklace.name}</h2>
         <p className="mt-1.5 text-xs text-muted">
-          {necklace.pearlNote ??
+          {necklace.stoneNote ??
             `${gemLabel}${necklace.carat ? ` · ${necklace.carat.toFixed(2)} ct` : ""}`}
         </p>
         <p className="mt-5 text-sm leading-relaxed text-muted">{necklace.description}</p>

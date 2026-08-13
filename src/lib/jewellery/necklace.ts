@@ -96,7 +96,7 @@ export const INFINITY_HEART_SLENDER: NecklaceSpec = {
  * those frames for us, including the parallel-transport pass that stops the
  * profile spinning as the curve twists.
  */
-function sweepProfile(
+export function sweepProfile(
   curve: Curve<Vector3>,
   profile: Vector2[],
   segments: number,
@@ -151,7 +151,7 @@ function sweepProfile(
 }
 
 /** An elliptical cross-section: a flattened band rather than a round wire. */
-function ribbonProfile(radius: number, flatten: number, segments = 10): Vector2[] {
+export function ribbonProfile(radius: number, flatten: number, segments = 10): Vector2[] {
   const points: Vector2[] = [];
   for (let i = 0; i < segments; i++) {
     const a = (i / segments) * Math.PI * 2;
@@ -317,7 +317,7 @@ export function buildNecklaceGeometry(spec: NecklaceSpec = INFINITY_HEART): Neck
 }
 
 /** Concatenates geometries that already share a material. */
-function mergeInto(parts: BufferGeometry[]): BufferGeometry {
+export function mergeInto(parts: BufferGeometry[]): BufferGeometry {
   const positions: number[] = [];
   const normals: number[] = [];
   const indices: number[] = [];

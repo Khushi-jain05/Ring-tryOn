@@ -12,7 +12,7 @@ import {
 } from "@/lib/jewellery/necklace";
 import type { NecklaceStyle } from "@/lib/jewellery/catalog";
 import type { RenderQuality } from "./Ring3D";
-import { PearlNecklace3D } from "./PearlNecklace3D";
+import { ADCollar3D } from "./ADCollar3D";
 
 /**
  * The pendant and chain, authored in millimetres with the bail at the origin.
@@ -42,9 +42,14 @@ export function Necklace3D({
 }) {
   // A strand's geometry depends on the neck it is on, so it is built rather than
   // scaled; the pendant is a fixed model on a chain that drapes.
-  if (style.kind === "pearls") {
+  if (style.kind === "collar") {
     return (
-      <PearlNecklace3D spec={style.spec} neckRadiusMm={neckRadiusMm} metal={metal} />
+      <ADCollar3D
+        spec={style.spec}
+        neckRadiusMm={neckRadiusMm}
+        metal={metal}
+        quality={quality}
+      />
     );
   }
   return (

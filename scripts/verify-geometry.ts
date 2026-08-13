@@ -14,10 +14,10 @@ import { createBandGeometry, createGemGeometry } from "../src/lib/rings/geometry
 import { createFloralGeometry, DEFAULT_FLORAL } from "../src/lib/rings/floral";
 import type { GemCut } from "../src/lib/rings/types";
 import {
-  PEARL_CHOKER,
-  buildPearlNecklace,
-  chokerDropFactor,
-} from "../src/lib/jewellery/pearls";
+  AD_COLLAR,
+  buildADCollar,
+  collarDropFactor,
+} from "../src/lib/jewellery/americanDiamond";
 import {
   INFINITY_HEART,
   INFINITY_HEART_SLENDER,
@@ -314,66 +314,80 @@ for (const [weight, spec] of [
   }
 }
 
-console.log("\n— Pearl choker ———————————————————————————————————");
+console.log("\n— American diamond collar —————————————————————");
 
 {
   const NECK_MM = 57;
-  const spec = PEARL_CHOKER;
-  const built = buildPearlNecklace(spec, NECK_MM);
+  const spec = AD_COLLAR;
+  const built = buildADCollar(spec, NECK_MM);
 
-  console.log(`       ${built.strands.length} strands of ${built.strands.map((s) => s.length).join(" and ")} pearls`);
-  checkTrue("both strands were built", built.strands.length === spec.strands);
+  const stats = analyse(built.metal);
+  if (stats.nonFinite > 0) fail(`collar metal: ${stats.nonFinite} non-finite triangles`);
+  else if (stats.volume <= 0) fail(`collar metal: volume ${stats.volume.toFixed(3)}, winding inverted`);
+  else pass(`collar metal: ${stats.triangles} triangles, volume ${stats.volume.toFixed(0)} mm³`);
 
-  for (const [i, strand] of built.strands.entries()) {
-    // Pearls have to touch. Gaps read as beads on a wire, which is what a cheap
-    // strand looks like and the one thing a pearl necklace must not.
-    let worstGap = 0;
-    for (let j = 1; j < strand.length; j++) {
-      const a = strand[j - 1];
-      const b = strand[j];
-      const centres = Math.hypot(
-        b.position[0] - a.position[0],
-        b.position[1] - a.position[1],
-        b.position[2] - a.position[2],
-      );
-      worstGap = Math.max(worstGap, centres - (a.radius + b.radius));
-    }
-    console.log(`       strand ${i}: widest gap between pearls ${worstGap.toFixed(2)} mm`);
-    checkTrue(`strand ${i} pearls touch`, worstGap < 0.6);
-  }
-
-  // Graduated: largest at the front, smallest at the nape. Getting this backwards
-  // puts the big pearls behind the neck where nobody sees them.
-  for (const [i, strand] of built.strands.entries()) {
-    const front = strand[Math.floor(strand.length / 2)].radius;
-    const nape = strand[0].radius;
-    checkTrue(`strand ${i} graduates larger toward the front`, front > nape * 1.1);
-  }
-
-  // The strands must nest, not intersect.
-  const inner = built.strands[0];
-  const outer = built.strands[1];
-  const innerFront = inner[Math.floor(inner.length / 2)];
-  const outerFront = outer[Math.floor(outer.length / 2)];
-  const separation = innerFront.position[1] - outerFront.position[1];
-  console.log(`       front strands sit ${separation.toFixed(1)} mm apart vertically`);
-  checkTrue(
-    "the outer strand hangs below the inner one without overlapping it",
-    separation > innerFront.radius + outerFront.radius * 0.6,
+  const total =
+    built.mainStones.length +
+    built.accentStones.length +
+    built.clusterStones.length +
+    built.drops.length;
+  console.log(
+    `       ${total} stones: ${built.mainStones.length} main, ${built.accentStones.length} accent, ${built.clusterStones.length} in clusters, ${built.drops.length} drops`,
   );
+  // An American diamond piece is defined by density. A sparse one is a different
+  // style of jewellery wearing the same name.
+  checkTrue("the collar is densely set", total > 140);
+  checkTrue("every cluster was built with its petals", built.clusterStones.length === spec.clusterCount * (spec.clusterPetals + 1));
+  checkTrue("all nine drops were built", built.drops.length === spec.dropCount);
 
-  // The drop hangs below the lowest strand, not inside it.
-  const dropTop = built.drop.position[1] + built.drop.radius;
-  const lowestBottom = outerFront.position[1] - outerFront.radius;
-  console.log(`       drop pearl top ${dropTop.toFixed(1)} mm, lowest strand bottom ${lowestBottom.toFixed(1)} mm`);
-  checkTrue("the drop pearl hangs clear of the strands", dropTop < lowestBottom);
-  checkTrue("the drop pearl is the largest one", built.drop.radius > innerFront.radius);
+  // Stones must sit on the band, not float off it. Each is checked against the
+  // nearest point of the metal it should be set into.
+  const metalPos = built.metal.attributes.position;
+  const nearestMetal = (p: readonly [number, number, number]) => {
+    let best = Infinity;
+    for (let i = 0; i < metalPos.count; i++) {
+      const d = Math.hypot(
+        metalPos.getX(i) - p[0],
+        metalPos.getY(i) - p[1],
+        metalPos.getZ(i) - p[2],
+      );
+      if (d < best) best = d;
+    }
+    return best;
+  };
 
-  // And a choker must be a choker: its whole drop is a small fraction of a neck.
-  const drop = chokerDropFactor(spec, NECK_MM);
-  console.log(`       choker drop factor ${drop.toFixed(2)} neck radii (${(drop * NECK_MM).toFixed(0)} mm)`);
-  checkTrue("a choker sits at the neck rather than hanging", drop < 0.7);
-  checkTrue("a choker still clears the neck's own anchor", drop > 0.2);
+  for (const [label, group] of [
+    ["main row", built.mainStones],
+    ["cluster", built.clusterStones],
+  ] as const) {
+    let worst = 0;
+    for (const stone of group) worst = Math.max(worst, nearestMetal(stone.position));
+    console.log(`       worst ${label} stone gap from the metal: ${worst.toFixed(2)} mm`);
+    checkTrue(`${label} stones are seated on the metal`, worst < spec.bandWidthMm * 0.6);
+  }
+
+  // Graduated: biggest at the front centre, tapering toward the ends.
+  const mid = built.mainStones[Math.floor(built.mainStones.length / 2)];
+  const end = built.mainStones[0];
+  checkTrue("the main row graduates larger toward the front", mid.scale > end.scale * 1.15);
+  const midDrop = built.drops[Math.floor(built.drops.length / 2)];
+  checkTrue("the drops graduate larger toward the front", midDrop.scale > built.drops[0].scale * 1.1);
+
+  // The collar covers the front and a plain chain closes the circle; without the
+  // chain the piece reads as a floating arc.
+  console.log(`       ${built.chainAngles.length} chain links close the back`);
+  checkTrue("a chain closes the circle behind the neck", built.chainAngles.length > 6);
+
+  // Drops must hang below the band, not into it.
+  const bandBottom = -spec.frontDipMm - spec.bandWidthMm / 2;
+  console.log(`       band bottom ${bandBottom.toFixed(1)} mm, lowest point ${built.lowestMm.toFixed(1)} mm`);
+  checkTrue("the drops hang below the band", built.lowestMm < bandBottom);
+
+  // A collar sits on the neck; it must not reach anywhere near a pendant's length.
+  const drop = collarDropFactor(spec, NECK_MM);
+  console.log(`       collar drop factor ${drop.toFixed(2)} neck radii (${(drop * NECK_MM).toFixed(0)} mm)`);
+  checkTrue("a collar sits at the neckline rather than hanging", drop < 1.2);
+  checkTrue("a collar still clears the neck's anchor", drop > 0.3);
 }
 
 console.log(

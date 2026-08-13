@@ -14,7 +14,7 @@ import {
 } from "@/lib/jewellery/necklace";
 import type { NecklaceStyle } from "@/lib/jewellery/catalog";
 import { StudioEnvironment } from "./StudioEnvironment";
-import { PearlNecklace3D } from "./PearlNecklace3D";
+import { ADCollar3D } from "./ADCollar3D";
 
 /**
  * The pendant at product scale, orbitable.
@@ -44,11 +44,11 @@ export function NecklaceViewer({
 }) {
   // A choker is a ring around a neck, so it has to be framed as a whole; a pendant
   // is 20 mm of detail on 400 mm of chain, so it has to be framed on the pendant.
-  const isPearls = style.kind === "pearls";
-  const camera = isPearls
+  const isCollar = style.kind === "collar";
+  const camera = isCollar
     ? ({ fov: 30, position: [0, 6, 320] } as const)
     : ({ fov: 30, position: [0, -9, 62] } as const);
-  const target: [number, number, number] = isPearls ? [0, -18, 0] : [0, -12, 0];
+  const target: [number, number, number] = isCollar ? [0, -18, 0] : [0, -12, 0];
   return (
     <div className={className}>
       <Canvas
@@ -60,15 +60,15 @@ export function NecklaceViewer({
           <StudioEnvironment resolution={256} />
           <directionalLight position={[18, 26, 30]} intensity={1.3} />
           <directionalLight position={[-22, -6, 20]} intensity={0.45} color="#dce8ff" />
-          {isPearls ? (
-            <PearlNecklace3D spec={style.spec} neckRadiusMm={57} metal={metal} />
+          {isCollar ? (
+            <ADCollar3D spec={style.spec} neckRadiusMm={57} metal={metal} />
           ) : (
             <PendantOnly metal={metal} gem={gem} spec={style.spec} />
           )}
           <ContactShadows
-            position={[0, isPearls ? -70 : -30, 0]}
+            position={[0, isCollar ? -70 : -30, 0]}
             opacity={0.28}
-            scale={isPearls ? 260 : 70}
+            scale={isCollar ? 260 : 70}
             blur={2.8}
             far={40}
             resolution={256}
@@ -78,8 +78,8 @@ export function NecklaceViewer({
           makeDefault
           enablePan={false}
           target={target}
-          minDistance={isPearls ? 120 : 26}
-          maxDistance={isPearls ? 520 : 130}
+          minDistance={isCollar ? 120 : 26}
+          maxDistance={isCollar ? 520 : 130}
           autoRotate={autoRotate}
           autoRotateSpeed={0.7}
           minPolarAngle={0.3}

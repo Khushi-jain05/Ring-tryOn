@@ -4,7 +4,7 @@ import {
   INFINITY_HEART_SLENDER,
   type NecklaceSpec,
 } from "./necklace";
-import { PEARL_CHOKER, chokerDropFactor, type PearlSpec } from "./pearls";
+import { AD_COLLAR, collarDropFactor, type ADSpec } from "./americanDiamond";
 
 /**
  * Necklaces. Kept apart from the ring catalogue because the two are tracked by
@@ -19,7 +19,7 @@ import { PEARL_CHOKER, chokerDropFactor, type PearlSpec } from "./pearls";
  */
 export type NecklaceStyle =
   | { kind: "pendant"; spec: NecklaceSpec }
-  | { kind: "pearls"; spec: PearlSpec };
+  | { kind: "collar"; spec: ADSpec };
 
 export type Necklace = {
   id: string;
@@ -30,8 +30,9 @@ export type Necklace = {
   gem: GemId;
   style: NecklaceStyle;
   carat?: number;
-  /** Pearls are strung; a carat weight would be meaningless. */
-  pearlNote?: string;
+  /** Used where a single carat weight would be meaningless — a densely set
+   * collar has hundreds of stones, not one. */
+  stoneNote?: string;
 };
 
 /**
@@ -42,22 +43,22 @@ export type Necklace = {
  * small fraction of what a chain gives.
  */
 export function dropFactorFor(necklace: Necklace, neckRadiusMm: number): number {
-  return necklace.style.kind === "pearls"
-    ? chokerDropFactor(necklace.style.spec, neckRadiusMm)
+  return necklace.style.kind === "collar"
+    ? collarDropFactor(necklace.style.spec, neckRadiusMm)
     : 2.15;
 }
 
 export const NECKLACES: Necklace[] = [
   {
-    id: "pearl-choker",
-    name: "Two-Strand Pearl Choker",
-    collection: "Pearls",
+    id: "ad-collar",
+    name: "Zohra Collar",
+    collection: "American Diamond",
     description:
-      "Two graduated strands of white pearls sitting at the base of the neck, with a single larger pearl dropping below them. Graduated on purpose: the largest pearls sit at the front where they are seen, and the strand tapers toward the nape so the weight stays off the back of the neck.",
-    metals: ["white-gold", "yellow-gold"],
+      "A twelve-millimetre collar set solid with American diamond — three rows of graduated round stones, seven claw-set clusters spaced along it, and nine pear drops falling from the lower edge. Bridal weight, and deliberately so: an American diamond piece is defined by how little metal it leaves showing.",
+    metals: ["white-gold", "platinum", "yellow-gold", "rose-gold"],
     gem: "diamond",
-    pearlNote: "5.2 mm graduated strands · 7.4 mm drop",
-    style: { kind: "pearls", spec: PEARL_CHOKER },
+    stoneNote: "≈200 stones · 4.4 mm mains · 6.2 mm pear drops",
+    style: { kind: "collar", spec: AD_COLLAR },
   },
   {
     id: "infinity-heart",
