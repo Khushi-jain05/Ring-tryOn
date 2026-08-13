@@ -18,6 +18,14 @@ export type NecklacePose = {
   quaternion: Quaternion;
   /** Half the neck's width, in anchor-plane units — the chain's radius. */
   neckRadius: number;
+  /** The same, in real millimetres — what the piece is actually sized against. */
+  neckRadiusMm: number;
+  /** Neck circumference in millimetres, the figure a necklace is sold by. */
+  neckCircumferenceMm: number;
+  /** Length from the shoulder line to the mouth, in millimetres. */
+  neckLengthMm: number;
+  /** True when the head-breadth cue was usable and folded into the estimate. */
+  neckFromHead: boolean;
   /** Shoulder-to-shoulder span, in anchor-plane units. */
   shoulderSpan: number;
   /** Measured shoulder breadth in millimetres, for sizing chain lengths. */
@@ -71,16 +79,41 @@ export const DEFAULT_NECKLACE_OPTIONS: NecklaceSolverOptions = {
  *
  * Anthropometric surveys put adult neck circumference near 360 mm against a
  * biacromial breadth near 395 mm, so the neck's radius is a little under a
- * seventh of the shoulder span. Stable enough across builds to size a chain from.
+ * seventh of the shoulder span.
  */
 const NECK_RADIUS_FROM_SHOULDERS = 0.145;
 
 /**
- * How far above the shoulder line the chain crosses the neck, again in shoulder
- * breadths. The clavicles rise toward the sternal notch, which is where a chain
- * actually sits.
+ * Neck radius as a fraction of head breadth, ear to ear.
+ *
+ * A second, independent estimate. Adult head breadth is around 150 mm against a
+ * neck 115 mm across, so the neck's radius is a little under two fifths of it.
+ *
+ * Two cues rather than one because they fail in unrelated ways, and a single fixed
+ * ratio is exactly the weakness that made the ring's sizing unreliable. Shoulder
+ * breadth is thrown off by posture and by heavy clothing; ear span collapses when
+ * the head turns and one ear goes out of view. Averaging them when both are
+ * plausible, and falling back when one is not, is far steadier than trusting
+ * either.
  */
-const NECK_BASE_RISE = 0.16;
+const NECK_RADIUS_FROM_HEAD = 0.385;
+
+/**
+ * How far above the shoulder line the chain crosses the neck, as a fraction of the
+ * distance from the shoulders to the mouth.
+ *
+ * Measured against the **neck's own length** rather than against shoulder breadth,
+ * which is the fix for placement not adapting to the wearer. Shoulder breadth says
+ * nothing about how long someone's neck is, so a fraction of it puts the collar at
+ * the base of an average neck, too high on a short one and too low on a long one.
+ * The shoulder-to-mouth distance is essentially the neck plus a fixed bit of jaw,
+ * so a fraction of that tracks the individual.
+ */
+const NOTCH_FROM_NECK_LENGTH = 0.2;
+
+/** Plausible bounds on the head-derived neck estimate, in shoulder breadths. */
+const MIN_EAR_SPAN_RATIO = 0.28;
+const MAX_EAR_SPAN_RATIO = 0.52;
 
 const scratch = {
   planar: Array.from({ length: POSE_LANDMARK_COUNT }, () => ({ x: 0, y: 0 })),
@@ -126,6 +159,10 @@ export class NecklacePoseSolver {
     position: new Vector3(),
     quaternion: new Quaternion(),
     neckRadius: 0.05,
+    neckRadiusMm: 57,
+    neckCircumferenceMm: 360,
+    neckLengthMm: 150,
+    neckFromHead: false,
     shoulderSpan: 0.35,
     shoulderWidthMm: NOMINAL_SHOULDER_WIDTH_MM,
     planeScale: 1,
@@ -291,11 +328,38 @@ export class NecklacePoseSolver {
     if (scratch.up.lengthSq() < 1e-10) scratch.up.set(0, 1, 0);
     scratch.up.normalize();
 
-    pose.neckRadius =
-      pose.shoulderSpan * NECK_RADIUS_FROM_SHOULDERS * anchor.sizeMultiplier;
+    // --- Neck width: two independent cues, in millimetres ------------------
+    const earSpanM = this.worldDistance(PL.LEFT_EAR, PL.RIGHT_EAR);
+    const ratio = shoulderWorldM > 0 ? earSpanM / shoulderWorldM : 0;
+    const earUsable = ratio > MIN_EAR_SPAN_RATIO && ratio < MAX_EAR_SPAN_RATIO;
 
-    // The chain crosses the neck above the shoulder line, at the sternal notch.
-    const rise = pose.shoulderSpan * NECK_BASE_RISE + pose.neckRadius * anchor.riseOffset;
+    const fromShoulders = pose.shoulderWidthMm * NECK_RADIUS_FROM_SHOULDERS;
+    const fromHead = earSpanM * 1000 * NECK_RADIUS_FROM_HEAD;
+    // Both when both are trustworthy; shoulders alone when the head is turned far
+    // enough that one ear has gone out of view and its span has collapsed.
+    const neckRadiusMm =
+      (earUsable ? (fromShoulders + fromHead) / 2 : fromShoulders) * anchor.sizeMultiplier;
+
+    pose.neckRadiusMm = neckRadiusMm;
+    pose.neckCircumferenceMm = neckCircumference(neckRadiusMm);
+    pose.neckFromHead = earUsable;
+
+    // Converted to plane units through the same scale everything else uses, so the
+    // piece is drawn at the size it was measured to be.
+    pose.neckRadius =
+      planeScale > 0
+        ? (neckRadiusMm / 1000) * planeScale
+        : pose.shoulderSpan * NECK_RADIUS_FROM_SHOULDERS * anchor.sizeMultiplier;
+
+    // --- Where the chain crosses, from the neck's own length ---------------
+    // The distance up to the mouth is essentially neck plus a fixed bit of jaw, so
+    // a fraction of it lands at the sternal notch on a short neck and a long one
+    // alike. A fraction of shoulder breadth cannot: breadth says nothing about how
+    // long a neck is.
+    const neckLength = scratch.shoulderMid.distanceTo(scratch.headMid);
+    pose.neckLengthMm = planeScale > 0 ? (neckLength / planeScale) * 1000 : 0;
+
+    const rise = neckLength * NOTCH_FROM_NECK_LENGTH + pose.neckRadius * anchor.riseOffset;
     pose.position.copy(scratch.shoulderMid).addScaledVector(scratch.up, rise);
 
     // --- Orientation -------------------------------------------------------
@@ -363,4 +427,19 @@ export class NecklacePoseSolver {
 
 function clamp(value: number, min: number, max: number): number {
   return value < min ? min : value > max ? max : value;
+}
+
+/**
+ * Circumference of the neck from its radius.
+ *
+ * A neck is not round — it is appreciably shallower front-to-back than it is wide,
+ * the same as a finger — so the circumference is an ellipse's perimeter, not a
+ * circle's. Using 2πr would over-report by about 6%, which on a necklace is most of
+ * a size.
+ */
+export function neckCircumference(radiusMm: number): number {
+  const a = radiusMm;
+  const b = radiusMm * 0.78;
+  // Ramanujan's first approximation.
+  return Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b)));
 }

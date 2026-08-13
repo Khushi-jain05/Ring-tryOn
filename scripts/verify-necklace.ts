@@ -37,7 +37,10 @@ const NECK_TO_MOUTH_M = 0.155;
  * Builds an upper body squared to the camera, head above shoulders. MediaPipe
  * world convention: +x right, +y down, +z away from the viewer.
  */
-function makeBody(): { x: number; y: number; z: number; visibility: number }[] {
+function makeBody(
+  frame = 1,
+  neckLengthScale = 1,
+): { x: number; y: number; z: number; visibility: number }[] {
   const p = Array.from({ length: POSE_LANDMARK_COUNT }, () => ({
     x: 0,
     y: 0,
@@ -49,7 +52,8 @@ function makeBody(): { x: number; y: number; z: number; visibility: number }[] {
     p[i] = { x, y: -yUp, z: -zToward, visibility: 0.99 };
   };
 
-  const half = SHOULDER_WIDTH_M / 2;
+  const half = (SHOULDER_WIDTH_M * frame) / 2;
+  const neck = NECK_TO_MOUTH_M * frame * neckLengthScale;
   // Landmark 11 is the subject's LEFT shoulder, which sits at +x in an
   // unmirrored image of someone facing the camera.
   set(PL.LEFT_SHOULDER, half, 0, 0);
@@ -57,11 +61,12 @@ function makeBody(): { x: number; y: number; z: number; visibility: number }[] {
 
   // Head, rising from the neck. The mouth leans slightly forward of the shoulder
   // line, as a head on a neck does.
-  set(PL.LEFT_MOUTH, 0.022, NECK_TO_MOUTH_M, 0.05);
-  set(PL.RIGHT_MOUTH, -0.022, NECK_TO_MOUTH_M, 0.05);
-  set(PL.NOSE, 0, NECK_TO_MOUTH_M + 0.035, 0.075);
-  set(PL.LEFT_EAR, 0.075, NECK_TO_MOUTH_M + 0.05, -0.01);
-  set(PL.RIGHT_EAR, -0.075, NECK_TO_MOUTH_M + 0.05, -0.01);
+  set(PL.LEFT_MOUTH, 0.022 * frame, neck, 0.05 * frame);
+  set(PL.RIGHT_MOUTH, -0.022 * frame, neck, 0.05 * frame);
+  set(PL.NOSE, 0, neck + 0.035 * frame, 0.075 * frame);
+  // Head breadth: the second, independent cue for how wide the neck is.
+  set(PL.LEFT_EAR, 0.075 * frame, neck + 0.05 * frame, -0.01 * frame);
+  set(PL.RIGHT_EAR, -0.075 * frame, neck + 0.05 * frame, -0.01 * frame);
   set(PL.LEFT_HIP, half * 0.62, -0.5, 0);
   set(PL.RIGHT_HIP, -half * 0.62, -0.5, 0);
 
@@ -311,6 +316,84 @@ const projected = {
 const drift = Math.hypot(projected.x - pose.position.x, projected.y - pose.position.y);
 console.log(`       anchor depth ${pose.anchorDepth.toFixed(4)} u, drift ${drift.toExponential(1)} u`);
 checkTrue("depth compensation preserves the screen position", drift < 1e-9);
+
+console.log("\n— Placement adapts to the wearer ——————————————————");
+
+// The point of measuring rather than assuming. Every quantity below has to track
+// the individual: a fixed anthropometric ratio would put the collar at the base of
+// an average neck and wrong on everyone else.
+{
+  const small = settle(makeBody(0.82));
+  const large = settle(makeBody(1.18));
+
+  console.log(
+    `       neck radius: small ${small!.neckRadiusMm.toFixed(1)} mm, average ${pose.neckRadiusMm.toFixed(1)} mm, large ${large!.neckRadiusMm.toFixed(1)} mm`,
+  );
+  checkTrue(
+    "a smaller frame measures a smaller neck",
+    small!.neckRadiusMm < pose.neckRadiusMm * 0.92,
+  );
+  checkTrue(
+    "a larger frame measures a larger neck",
+    large!.neckRadiusMm > pose.neckRadiusMm * 1.08,
+  );
+  // And it must scale in proportion, not merely in the right direction.
+  check(
+    "neck size scales with the frame",
+    large!.neckRadiusMm / small!.neckRadiusMm,
+    1.18 / 0.82,
+    0.06,
+  );
+
+  console.log(
+    `       neck circumference: small ${small!.neckCircumferenceMm.toFixed(0)} mm, large ${large!.neckCircumferenceMm.toFixed(0)} mm`,
+  );
+  // A neck is oval, not round, so 2πr would over-report by ~6% — most of a size.
+  checkTrue(
+    "circumference is computed for an oval section, not a circle",
+    pose.neckCircumferenceMm < 2 * Math.PI * pose.neckRadiusMm * 0.98,
+  );
+
+  // The head cue must actually be contributing, or this is still one ratio.
+  checkTrue("the head-breadth cue was folded in", pose.neckFromHead);
+
+  // Neck LENGTH is the one shoulder breadth cannot speak to. Two bodies of the
+  // same width with different neck lengths must seat the collar differently.
+  const shortNeck = settle(makeBody(1, 0.7));
+  const longNeck = settle(makeBody(1, 1.3));
+  const shoulderY = shoulderMid.y;
+  const shortRise = shortNeck!.position.y - shoulderY;
+  const longRise = longNeck!.position.y - shoulderY;
+  console.log(
+    `       rise above the shoulders: short neck ${shortRise.toFixed(4)}, long neck ${longRise.toFixed(4)}`,
+  );
+  checkTrue(
+    "a longer neck seats the collar higher",
+    longRise > shortRise * 1.3,
+  );
+  // Same frame, so the neck's WIDTH must not move with its length.
+  check(
+    "neck width is independent of neck length",
+    longNeck!.neckRadiusMm,
+    shortNeck!.neckRadiusMm,
+    2,
+  );
+
+  // With one ear hidden the head cue collapses and must be rejected, falling back
+  // to shoulders rather than reporting a tiny neck.
+  const turned = makeBody().map((p, i) =>
+    i === PL.LEFT_EAR ? { ...p, x: p.x * 0.05, visibility: 0.99 } : p,
+  );
+  const oneEar = settle(turned);
+  console.log(
+    `       one ear hidden: neck ${oneEar!.neckRadiusMm.toFixed(1)} mm, head cue used: ${oneEar!.neckFromHead}`,
+  );
+  checkTrue("an implausible ear span is rejected", !oneEar!.neckFromHead);
+  checkTrue(
+    "rejecting it still leaves a sane neck",
+    Math.abs(oneEar!.neckRadiusMm - pose.neckRadiusMm) < 8,
+  );
+}
 
 console.log("\n— The occluder must not eat the jewellery —————————");
 

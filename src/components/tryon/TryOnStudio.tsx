@@ -165,18 +165,50 @@ export function TryOnStudio() {
           {isNecklace ? (
             <div className="space-y-5 rounded-2xl border border-line bg-surface-muted/40 p-5">
               <div>
-                <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted">
-                  Measured from your shoulders
-                </p>
-                <p className="mt-2 text-sm">
-                  Neck <span className="tabular-nums">{(store.neckSizeMm * 2).toFixed(0)} mm</span>{" "}
-                  across
-                </p>
-                <p className="mt-1.5 text-xs leading-relaxed text-muted">
-                  A necklace is sized from shoulder breadth rather than from a
-                  ruler — the pose model reports it in real millimetres, so the
-                  chain is laid to your own neck and the pendant lands where it
-                  actually would.
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted">
+                    Measured from your neck
+                  </p>
+                  {store.neckReading && (
+                    <span
+                      className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wider ${
+                        store.neckReading.twoCues
+                          ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+                          : "border-amber-500/40 text-amber-600 dark:text-amber-400"
+                      }`}
+                    >
+                      {store.neckReading.twoCues ? "Two cues" : "One cue"}
+                    </span>
+                  )}
+                </div>
+
+                {store.neckReading ? (
+                  <>
+                    <p className="mt-2 font-display text-3xl tabular-nums">
+                      {store.neckReading.circumferenceMm.toFixed(0)} mm
+                    </p>
+                    <p className="mt-1 text-xs text-muted">
+                      around · {(store.neckSizeMm * 2).toFixed(0)} mm across ·{" "}
+                      {store.neckReading.lengthMm.toFixed(0)} mm long
+                    </p>
+                    <p className="mt-2 text-xs leading-relaxed text-muted">
+                      {store.neckReading.twoCues
+                        ? "Measured from your shoulder breadth and your head breadth together, so the estimate does not rest on one assumed proportion."
+                        : "Head turned too far to use its breadth, so this is from shoulder breadth alone — square up to the camera for a steadier reading."}
+                    </p>
+                  </>
+                ) : (
+                  <p className="mt-2 text-sm text-muted">
+                    Sit back until both shoulders are in frame and face the camera
+                    squarely.
+                  </p>
+                )}
+
+                <p className="mt-2.5 text-xs leading-relaxed text-muted">
+                  Both the piece&rsquo;s size and where it sits are derived from
+                  this: the collar follows your own neck&rsquo;s curve, and how high
+                  it crosses comes from your neck&rsquo;s length rather than an
+                  average.
                 </p>
               </div>
 

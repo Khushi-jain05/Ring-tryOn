@@ -66,6 +66,13 @@ type TryOnState = Persisted & {
   necklaceAnchor: NecklaceAnchor;
   /** Measured neck radius in millimetres; drives how the chain is laid. */
   neckSizeMm: number;
+  /** What the camera measured about the neck, for the sizing panel. */
+  neckReading: {
+    circumferenceMm: number;
+    lengthMm: number;
+    /** True when the head-breadth cue was usable, so the estimate used two. */
+    twoCues: boolean;
+  } | null;
   mirrored: boolean;
   flipGem: boolean;
   /** Fixed magnification of the centre of the frame, 1 being uncropped. */
@@ -108,6 +115,7 @@ type TryOnState = Persisted & {
   setNecklace: (necklaceId: string) => void;
   setNecklaceAnchor: (patch: Partial<NecklaceAnchor>) => void;
   setNeckSizeMm: (mm: number) => void;
+  setNeckReading: (reading: TryOnState["neckReading"]) => void;
   toggleMirrored: () => void;
   toggleFlipGem: () => void;
   setZoom: (zoom: number) => void;
@@ -139,6 +147,7 @@ export const useTryOnStore = create<TryOnState>()(
       anchor: anchorFor("ring"),
       necklaceAnchor: DEFAULT_NECKLACE_ANCHOR,
       neckSizeMm: 57,
+      neckReading: null,
       mirrored: true,
       flipGem: false,
       zoom: 1.7,
@@ -248,6 +257,7 @@ export const useTryOnStore = create<TryOnState>()(
       setNecklaceAnchor: (patch) =>
         set((s) => ({ necklaceAnchor: { ...s.necklaceAnchor, ...patch } })),
       setNeckSizeMm: (neckSizeMm) => set({ neckSizeMm }),
+      setNeckReading: (neckReading) => set({ neckReading }),
       toggleMirrored: () => set((s) => ({ mirrored: !s.mirrored })),
       toggleFlipGem: () => set((s) => ({ flipGem: !s.flipGem })),
       setZoom: (zoom) => set({ zoom }),

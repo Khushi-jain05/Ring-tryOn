@@ -82,6 +82,7 @@ export function TrackedNecklace({
   // rebuilt only when it changes by enough to see.
   const neckSize = useTryOnStore((s) => s.neckSizeMm);
   const setNeckSize = useTryOnStore((s) => s.setNeckSizeMm);
+  const setNeckReading = useTryOnStore((s) => s.setNeckReading);
   const anchor = useTryOnStore((s) => s.necklaceAnchor);
 
   const { size } = useThree();
@@ -165,9 +166,17 @@ export function TrackedNecklace({
       const unitsPerMm = pose.planeScale > 0 ? (pose.planeScale / 1000) * k : 0;
       if (unitsPerMm > 0) group.scale.setScalar(unitsPerMm);
 
-      const neckRadiusMm = pose.shoulderWidthMm * 0.145 * state.necklaceAnchor.sizeMultiplier;
+      // Measured by the solver from two cues; see NecklacePoseSolver.
+      const neckRadiusMm = pose.neckRadiusMm;
       // Only publish a change worth relaying links for.
-      if (Math.abs(neckRadiusMm - neckSize) > 0.8) setNeckSize(neckRadiusMm);
+      if (Math.abs(neckRadiusMm - neckSize) > 0.8) {
+        setNeckSize(neckRadiusMm);
+        setNeckReading({
+          circumferenceMm: pose.neckCircumferenceMm,
+          lengthMm: pose.neckLengthMm,
+          twoCues: pose.neckFromHead,
+        });
+      }
 
       // The occluder is outside the scaled group, so it is sized in plane units.
       const neckRadiusUnits = neckRadiusMm * unitsPerMm * NECK_PRESS;
