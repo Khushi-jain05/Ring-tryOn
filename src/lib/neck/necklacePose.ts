@@ -10,6 +10,7 @@ import {
   POSE_LANDMARK_COUNT,
   REQUIRED_LANDMARKS,
 } from "./landmarks";
+import { estimateNeckPlaneScale } from "./scale";
 
 export type NecklacePose = {
   /** Where the chain crosses the base of the neck, on the anchor plane. */
@@ -264,20 +265,13 @@ export class NecklacePoseSolver {
       scratch.world[i].z = this.worldSmoothed[i * 3 + 2];
     }
 
-    // Pixels per metre, from the shoulder span measured both ways. One rigid
-    // segment is enough here — unlike a hand, the shoulders are wide, far apart
-    // and among the most reliably located landmarks the model produces.
-    const planarSpan = Math.hypot(
-      scratch.planar[PL.LEFT_SHOULDER].x - scratch.planar[PL.RIGHT_SHOULDER].x,
-      scratch.planar[PL.LEFT_SHOULDER].y - scratch.planar[PL.RIGHT_SHOULDER].y,
-    );
-    const worldSpan = this.worldDistance(PL.LEFT_SHOULDER, PL.RIGHT_SHOULDER);
-    if (worldSpan > 0.15) {
-      this.scaleSmoothed = this.scaleFilter.filter(
-        [planarSpan / worldSpan],
-        dt,
-        this.scaleSmoothed,
-      );
+    // Pixels per metre, from a least-squares fit over the head and shoulders. See
+    // estimateNeckPlaneScale for why this cannot be one screen span divided by one
+    // 3D span: those are different quantities, and turning the torso pulls them
+    // apart until the piece shrinks to nothing.
+    const raw = estimateNeckPlaneScale(scratch.planar, scratch.world);
+    if (raw !== null) {
+      this.scaleSmoothed = this.scaleFilter.filter([raw], dt, this.scaleSmoothed);
     }
   }
 

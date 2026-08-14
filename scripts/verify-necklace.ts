@@ -253,6 +253,95 @@ for (const distance of [0.55, 1.2]) {
   );
 }
 
+console.log("\n— A full turn ————————————————————————————————————");
+
+/**
+ * The collar has to be right at *every* rotation, not just front-on.
+ *
+ * This is the check the old scale estimator would have failed outright. It divided
+ * the shoulders' screen span by their full 3D span — two different quantities that
+ * agree only when the torso faces the camera. Turning pulls them apart, so the
+ * estimate collapsed toward zero and the necklace shrank away as the wearer rotated.
+ * The sweep makes that visible as a percentage rather than as something you notice
+ * on a webcam and cannot attribute.
+ */
+{
+  const STEPS = 48;
+  const scales: number[] = [];
+  const necks: number[] = [];
+  const handedness: number[] = [];
+  let worstSeat = 0;
+  let previousForward: Vector3 | null = null;
+  let maxForwardStep = 0;
+  let sweptAngle = 0;
+
+  for (let i = 0; i <= STEPS; i++) {
+    const a = (i / STEPS) * Math.PI * 2;
+    const turned = makeBody().map((p) => ({
+      x: p.x * Math.cos(a) + p.z * Math.sin(a),
+      y: p.y,
+      z: -p.x * Math.sin(a) + p.z * Math.cos(a),
+      visibility: p.visibility,
+    }));
+
+    const p = settle(turned, options, geometry, 120);
+    if (!p) {
+      failures++;
+      console.log(`FAIL  no pose at ${((a * 180) / Math.PI).toFixed(0)}°`);
+      continue;
+    }
+
+    scales.push(p.planeScale);
+    necks.push(p.neckRadiusMm);
+
+    // The frame must stay a rotation the whole way round; a basis that loses its
+    // handedness mirrors the piece.
+    const across = new Vector3(1, 0, 0).applyQuaternion(p.quaternion);
+    const up = new Vector3(0, 1, 0).applyQuaternion(p.quaternion);
+    const forward = new Vector3(0, 0, 1).applyQuaternion(p.quaternion);
+    handedness.push(across.clone().cross(up).dot(forward));
+
+    // The anchor must stay on the neck at every angle.
+    const img = project(turned, DISTANCE, ASPECT);
+    const sY = ((0.5 - img[PL.LEFT_SHOULDER].y) + (0.5 - img[PL.RIGHT_SHOULDER].y)) / 2;
+    const mY = ((0.5 - img[PL.LEFT_MOUTH].y) + (0.5 - img[PL.RIGHT_MOUTH].y)) / 2;
+    if (p.position.y < sY - 0.01 || p.position.y > mY) worstSeat++;
+
+    // The chest normal must sweep smoothly through the full turn and come back.
+    if (previousForward) {
+      const step = forward.angleTo(previousForward);
+      maxForwardStep = Math.max(maxForwardStep, step);
+      sweptAngle += step;
+    }
+    previousForward = forward.clone();
+  }
+
+  const spread = (xs: number[]) => {
+    const min = Math.min(...xs);
+    const max = Math.max(...xs);
+    return (max - min) / ((max + min) / 2);
+  };
+
+  const scaleSpread = spread(scales);
+  const neckSpread = spread(necks);
+  console.log(`       plane scale varies by ${(scaleSpread * 100).toFixed(1)}% over 360°`);
+  console.log(`       measured neck varies by ${(neckSpread * 100).toFixed(1)}% over 360°`);
+  console.log(`       chest normal swept ${((sweptAngle * 180) / Math.PI).toFixed(0)}°, largest step ${((maxForwardStep * 180) / Math.PI).toFixed(0)}°`);
+
+  // A rigid body does not change size when it rotates.
+  checkTrue("the piece holds its scale through a full turn", scaleSpread < 0.12);
+  checkTrue("the measured neck holds through a full turn", neckSpread < 0.15);
+  checkTrue("the anchor stays on the neck at every angle", worstSeat === 0);
+  checkTrue(
+    "the frame stays right-handed at every angle",
+    handedness.every((h) => Math.abs(h - 1) < 0.05),
+  );
+  // A full revolution and no jumps: the piece follows the body round rather than
+  // snapping at some pose.
+  checkTrue("the chest normal completes one revolution", Math.abs(sweptAngle - Math.PI * 2) < 0.5);
+  checkTrue("the piece rotates smoothly, without snapping", maxForwardStep < Math.PI / 5);
+}
+
 console.log("\n— Turning and leaning ————————————————————————————");
 
 const rotY = (a: number) => (p: { x: number; y: number; z: number; visibility: number }) => ({
