@@ -27,6 +27,37 @@ git — they are 41 MB of fully reproducible binaries, restored by
 than a CDN so the try-on works offline, under a strict CSP, and without a third
 party learning that anyone opened the page.
 
+## Deploying to Vercel
+
+Works with no configuration — import the repo and deploy. Framework detection picks
+up Next.js, and `postinstall` fetches the tracking assets during install, before the
+build runs.
+
+Two things worth knowing, both already handled:
+
+- **The 47 MB of tracking assets are not in git.** They are restored on the build
+  server by `scripts/fetch-mediapipe.mjs`, which needs outbound network access to
+  `storage.googleapis.com`. On a build server (`CI` or `VERCEL` set) a failed or
+  truncated download **fails the build deliberately**. Deploying without them would
+  produce a green build and a try-on that silently cannot track anything — nothing
+  would surface until a visitor opened their camera. If your build environment has
+  no network access, commit `public/mediapipe/` instead and drop it from
+  `.gitignore`.
+- **They are cached for a year.** A visitor downloads an 11.7 MB WASM runtime plus a
+  7.5 MB model for rings, and 5.5 MB more for necklaces. Next.js serves `public/`
+  with `max-age=0` by default, which would revalidate all of it on every visit, so
+  `next.config.ts` marks `/mediapipe/*` immutable. They are versioned artifacts —
+  the runtime is pinned by the installed package and each model URL carries its own
+  version — so a different version is a different file.
+
+The camera needs a secure context, which Vercel provides. Nothing runs server-side:
+tracking and rendering are entirely in the browser, and no video is uploaded, so
+there is nothing to configure and no environment variables to set.
+
+Verified by building a clean `git archive` checkout with `npm ci` and serving it: all
+seven routes return 200, both models and the WASM runtime are reachable, and the
+cache headers apply to the assets without touching the pages.
+
 ## How the placement works
 
 Two landmark sets come back from MediaPipe each frame, and each is reliable at

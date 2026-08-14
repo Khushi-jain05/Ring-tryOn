@@ -87,12 +87,44 @@ async function fetchModel(model) {
   console.log(`[mediapipe] saved ${model.dest}`);
 }
 
+/**
+ * On a build server a missing model must fail the build.
+ *
+ * These assets are gitignored and fetched here, so a download that quietly fails
+ * during deployment produces a green build and an app that cannot track anything —
+ * the worst possible outcome, because nothing surfaces until a real visitor opens
+ * the camera. Locally the opposite is true: failing `npm install` over a flaky
+ * network is just obstructive, since the app can be fixed by re-running the script.
+ */
+const STRICT = Boolean(process.env.CI || process.env.VERCEL);
+
 try {
   await copyWasm();
   for (const model of MODELS) await fetchModel(model);
+
+  // Verify rather than trust: a truncated download leaves a file that exists.
+  const missing = [];
+  for (const model of MODELS) {
+    if (!(await exists(model.dest, model.minBytes))) missing.push(model.dest);
+  }
+  if (!(await exists(`${WASM_DEST}/vision_wasm_internal.wasm`, 1_000_000))) {
+    missing.push(`${WASM_DEST}/vision_wasm_internal.wasm`);
+  }
+  if (missing.length > 0) {
+    throw new Error(`missing or truncated: ${missing.join(", ")}`);
+  }
+  console.log("[mediapipe] all tracking assets verified");
 } catch (error) {
-  // A missing model breaks the try-on but not the build, and failing the whole
-  // install over a network hiccup is worse than a loud warning.
-  console.warn(`[mediapipe] setup incomplete: ${error.message}`);
+  const message = `[mediapipe] setup incomplete: ${error.message}`;
+  if (STRICT) {
+    console.error(message);
+    console.error(
+      "[mediapipe] failing the build — deploying without these would ship a try-on " +
+        "that silently cannot track. Re-run the deployment, or vendor the files if " +
+        "the build environment has no network access.",
+    );
+    process.exit(1);
+  }
+  console.warn(message);
   console.warn("[mediapipe] re-run with: npm run setup:mediapipe");
 }
