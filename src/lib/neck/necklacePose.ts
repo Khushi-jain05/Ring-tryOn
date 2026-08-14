@@ -156,6 +156,17 @@ export class NecklacePoseSolver {
   private scaleSmoothed: number[] = [];
   private lastTimestamp: number | null = null;
 
+  /**
+   * The crop the filters' history was accumulated under.
+   *
+   * Every plane coordinate scales linearly with the preview's digital zoom, so
+   * changing it changes the units the filter memory is in. Left alone, the filters
+   * treat that as a real, sudden movement and the piece slides for a second after
+   * each adjustment before settling — which looks exactly like the placement
+   * breaking when you zoom.
+   */
+  private lastZoom = 1;
+
   readonly pose: NecklacePose = {
     position: new Vector3(),
     quaternion: new Quaternion(),
@@ -212,6 +223,18 @@ export class NecklacePoseSolver {
     this.lastTimestamp = timestampMs;
 
     if (dt > 0.5) this.reset();
+
+    // A zoom change is a known change of units, not a new measurement, so convert
+    // the filter history into the new units rather than smoothing across it.
+    const zoom = geometry.zoom > 0 ? geometry.zoom : 1;
+    if (zoom !== this.lastZoom) {
+      const factor = zoom / this.lastZoom;
+      this.planarFilter.rescale(factor);
+      this.scaleFilter.rescale(factor);
+      for (let i = 0; i < this.planarSmoothed.length; i++) this.planarSmoothed[i] *= factor;
+      for (let i = 0; i < this.scaleSmoothed.length; i++) this.scaleSmoothed[i] *= factor;
+      this.lastZoom = zoom;
+    }
 
     this.project(landmarks, geometry);
     this.smooth(dt, world, options);

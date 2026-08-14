@@ -211,6 +211,14 @@ export class RingPoseSolver {
   private lastTimestamp: number | null = null;
 
   /**
+   * The crop the filters' history was accumulated under. See the matching note in
+   * NecklacePoseSolver: a zoom change rescales every plane coordinate, so the
+   * filter memory has to be converted rather than smoothed across, or the ring
+   * slides for a second after each zoom adjustment.
+   */
+  private lastZoom = 1;
+
+  /**
    * Which way round the palm-plane normal is. Held between frames because the
    * evidence for it comes and goes: a straight finger offers none at all, and
    * recomputing from scratch every frame lets the setting flick from one side of

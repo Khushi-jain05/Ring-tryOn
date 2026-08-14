@@ -37,6 +37,8 @@ export type CalibrationSource = "none" | "card" | "known-size";
 type Persisted = {
   metricBias: number;
   calibrationSource: CalibrationSource;
+  necklaceAnchor: NecklaceAnchor;
+  anchor: RingAnchor;
 };
 
 /** Which piece is being tried on. The two use different tracking models. */
@@ -114,6 +116,8 @@ type TryOnState = Persisted & {
   setMode: (mode: TryOnMode) => void;
   setNecklace: (necklaceId: string) => void;
   setNecklaceAnchor: (patch: Partial<NecklaceAnchor>) => void;
+  /** Discards any hand-dialled offsets and returns to what the camera measures. */
+  resetPlacement: () => void;
   setNeckSizeMm: (mm: number) => void;
   setNeckReading: (reading: TryOnState["neckReading"]) => void;
   toggleMirrored: () => void;
@@ -256,6 +260,11 @@ export const useTryOnStore = create<TryOnState>()(
       setNecklace: (necklaceId) => set({ necklaceId }),
       setNecklaceAnchor: (patch) =>
         set((s) => ({ necklaceAnchor: { ...s.necklaceAnchor, ...patch } })),
+      resetPlacement: () =>
+        set((s) => ({
+          necklaceAnchor: DEFAULT_NECKLACE_ANCHOR,
+          anchor: anchorFor(s.anchor.finger),
+        })),
       setNeckSizeMm: (neckSizeMm) => set({ neckSizeMm }),
       setNeckReading: (neckReading) => set({ neckReading }),
       toggleMirrored: () => set((s) => ({ mirrored: !s.mirrored })),
@@ -275,9 +284,16 @@ export const useTryOnStore = create<TryOnState>()(
       name: "aurelia-tryon",
       // A hand does not change size between visits, so the calibration is worth
       // keeping. Nothing else here is; a stale ring or status would be confusing.
+      // Anything the wearer had to dial in by hand is worth keeping. Making
+      // someone re-find the same offset on every visit is the sort of thing that
+      // makes a manual control feel like a workaround rather than a preference.
+      // Nothing *measured* is persisted — that is re-derived from the camera each
+      // session, and a stale measurement would be worse than none.
       partialize: (state): Persisted => ({
         metricBias: state.metricBias,
         calibrationSource: state.calibrationSource,
+        necklaceAnchor: state.necklaceAnchor,
+        anchor: state.anchor,
       }),
     },
   ),

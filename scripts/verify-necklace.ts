@@ -253,6 +253,83 @@ for (const distance of [0.55, 1.2]) {
   );
 }
 
+console.log("\n— Changing the zoom mid-session ———————————————————");
+
+/**
+ * Adjusting the preview's zoom must not disturb where the piece sits.
+ *
+ * Plane coordinates scale linearly with the crop, so a zoom change silently changes
+ * the units the smoothing filters' history is in. Left alone the filters read that
+ * as a real, sudden movement and spend the next second or so chasing a step that
+ * never physically happened — on screen the necklace drifts off the neck after every
+ * zoom adjustment and then creeps back. The fix converts the history into the new
+ * units instead, and this is the check that it lands immediately rather than
+ * settling.
+ */
+{
+  const solver = new NecklacePoseSolver();
+  const result = {
+    landmarks: [project(body, DISTANCE, ASPECT)],
+    worldLandmarks: [body],
+    segmentationMasks: undefined,
+  };
+
+  // Settle at 1x.
+  let frame = 0;
+  let settled = null;
+  for (let i = 0; i < 200; i++) {
+    settled = solver.solve(result as never, geometry, options, frame++ * (1000 / 30));
+  }
+  const before = {
+    y: settled!.position.y,
+    scale: settled!.planeScale,
+    neck: settled!.neckRadiusMm,
+  };
+
+  // Now crop in. Landmarks are unchanged in video space; only the crop moves.
+  const ZOOM = 1.8;
+  const zoomed: FrameGeometry = { ...geometry, zoom: ZOOM };
+  const zoomedResult = {
+    landmarks: [project(body, DISTANCE, ASPECT)],
+    worldLandmarks: [body],
+    segmentationMasks: undefined,
+  };
+
+  // One single frame after the change — no time to settle.
+  const first = solver.solve(zoomedResult as never, zoomed, options, frame++ * (1000 / 30));
+
+  // Everything in plane units should have scaled by exactly the zoom ratio, and
+  // the millimetre measurement should not have moved at all.
+  console.log(
+    `       one frame after 1x → ${ZOOM}x: scale ${before.scale.toFixed(3)} → ${first!.planeScale.toFixed(3)} (expected ${(before.scale * ZOOM).toFixed(3)})`,
+  );
+  check(
+    "the scale follows the crop immediately",
+    first!.planeScale,
+    before.scale * ZOOM,
+    before.scale * ZOOM * 0.02,
+  );
+  check(
+    "the anchor follows the crop immediately",
+    first!.position.y,
+    before.y * ZOOM,
+    Math.abs(before.y * ZOOM) * 0.03,
+  );
+  // The neck is measured in real millimetres from the metric landmarks, so a crop
+  // must not change it by even a fraction.
+  check("the measured neck is unaffected by the crop", first!.neckRadiusMm, before.neck, 0.5);
+
+  // And it must be stable, not merely correct on the first frame — no creep as the
+  // filters catch up, because there is nothing left to catch up on.
+  let later = first;
+  for (let i = 0; i < 40; i++) {
+    later = solver.solve(zoomedResult as never, zoomed, options, frame++ * (1000 / 30));
+  }
+  const creep = Math.abs(later!.position.y - first!.position.y);
+  console.log(`       drift over the next 40 frames: ${creep.toExponential(1)} plane units`);
+  checkTrue("the piece does not creep after the crop settles", creep < 0.002);
+}
+
 console.log("\n— A full turn ————————————————————————————————————");
 
 /**

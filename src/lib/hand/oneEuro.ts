@@ -32,6 +32,10 @@ class LowPass {
   reset(): void {
     this.y = null;
   }
+
+  rescale(factor: number): void {
+    if (this.y !== null) this.y *= factor;
+  }
 }
 
 export type OneEuroConfig = {
@@ -78,6 +82,25 @@ export class OneEuroFilter {
     this.dxFilter.reset();
     this.prev = null;
   }
+
+  /**
+   * Multiplies the filter's memory by a constant.
+   *
+   * For a *known* change of units — the preview's digital zoom changing, which
+   * rescales every plane coordinate by a fixed ratio — this is the right response
+   * and a reset is not. The filter's stored history is in the old units, so
+   * smoothing across the change makes it chase a step that never physically
+   * happened: on screen the jewellery slides for a second or so after every zoom
+   * adjustment and then settles. Resetting instead loses all history and pops.
+   * Rescaling converts the history into the new units so smoothing simply
+   * continues, and the change is invisible.
+   */
+  rescale(factor: number): void {
+    if (!Number.isFinite(factor) || factor <= 0) return;
+    this.xFilter.rescale(factor);
+    this.dxFilter.rescale(factor);
+    if (this.prev !== null) this.prev *= factor;
+  }
 }
 
 /** A One Euro filter applied component-wise to a fixed-length vector. */
@@ -101,5 +124,10 @@ export class OneEuroVector {
 
   reset(): void {
     for (const f of this.filters) f.reset();
+  }
+
+  /** See OneEuroFilter.rescale — a known change of units, not a new measurement. */
+  rescale(factor: number): void {
+    for (const f of this.filters) f.rescale(factor);
   }
 }

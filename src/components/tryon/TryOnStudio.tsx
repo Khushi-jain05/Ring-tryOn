@@ -40,6 +40,15 @@ export function TryOnStudio() {
   // sizing and placement controls below differ.
   const piece = isNecklace ? necklace : ring;
 
+  // Whether anything is currently overriding what the camera measures. Shown so a
+  // hand-dialled offset is never silently in effect — the commonest way a try-on
+  // ends up looking wrong for reasons the wearer cannot see.
+  const a = store.necklaceAnchor;
+  const adjusted =
+    Math.abs(a.sizeMultiplier - 1) > 0.005 ||
+    Math.abs(a.riseOffset) > 0.005 ||
+    Math.abs(a.dropFactor - 1) > 0.005;
+
   return (
     <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8 lg:py-10">
       {/*
@@ -210,6 +219,21 @@ export function TryOnStudio() {
                   it crosses comes from your neck&rsquo;s length rather than an
                   average.
                 </p>
+
+                {adjusted && (
+                  <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-line bg-background/60 px-3 py-2">
+                    <p className="text-xs text-muted">
+                      Placement adjusted by hand. Kept for next time.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={store.resetPlacement}
+                      className="shrink-0 text-xs font-medium text-accent underline-offset-4 hover:underline"
+                    >
+                      Automatic
+                    </button>
+                  </div>
+                )}
               </div>
 
               <Slider
