@@ -43,3 +43,7 @@ next-env.d.ts
 # MediaPipe runtime + model (41 MB, fully reproducible).
 # Restored by scripts/fetch-mediapipe.mjs, which runs on npm install.
 /public/mediapipe/
+
+# Output of `npm run build:check`, kept separate so verifying a build cannot
+# corrupt a running dev server's shared .next cache.
+/.next-check/

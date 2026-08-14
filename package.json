@@ -9,7 +9,8 @@
     "lint": "eslint",
     "verify": "tsx scripts/verify-solver.ts && tsx scripts/verify-necklace.ts && tsx scripts/verify-geometry.ts",
     "setup:mediapipe": "node scripts/fetch-mediapipe.mjs",
-    "postinstall": "node scripts/fetch-mediapipe.mjs"
+    "postinstall": "node scripts/fetch-mediapipe.mjs",
+    "build:check": "BUILD_DIST_DIR=.next-check next build"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.0.1",
