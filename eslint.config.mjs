@@ -8,6 +8,9 @@ import typescript from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   globalIgnores([
     ".next/**",
+    // Output of `npm run build:check`, which builds to its own directory so a
+    // verification build cannot corrupt a running dev server's cache.
+    ".next-check/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
