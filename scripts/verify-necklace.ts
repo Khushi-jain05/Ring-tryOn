@@ -40,6 +40,8 @@ const NECK_TO_MOUTH_M = 0.155;
 function makeBody(
   frame = 1,
   neckLengthScale = 1,
+  /** Head yaw in radians, about the neck's axis. The torso does not move. */
+  headYaw = 0,
 ): { x: number; y: number; z: number; visibility: number }[] {
   const p = Array.from({ length: POSE_LANDMARK_COUNT }, () => ({
     x: 0,
@@ -69,6 +71,34 @@ function makeBody(
   set(PL.RIGHT_EAR, -0.075 * frame, neck + 0.05 * frame, -0.01 * frame);
   set(PL.LEFT_HIP, half * 0.62, -0.5, 0);
   set(PL.RIGHT_HIP, -half * 0.62, -0.5, 0);
+
+  // Turn the head on its own, about the neck's axis, leaving the shoulders where
+  // they are. The head's landmarks all sit forward of that axis, so they swing a
+  // long way — which is exactly why deriving the necklace's frame from them was
+  // wrong.
+  if (headYaw !== 0) {
+    const pivotY = -neck * 0.55; // roughly the top of the neck, in world y-down
+    const c = Math.cos(headYaw);
+    const s2 = Math.sin(headYaw);
+    for (const i of [
+      PL.NOSE,
+      PL.LEFT_EYE,
+      PL.RIGHT_EYE,
+      PL.LEFT_EAR,
+      PL.RIGHT_EAR,
+      PL.LEFT_MOUTH,
+      PL.RIGHT_MOUTH,
+    ]) {
+      const q = p[i];
+      const dy = q.y - pivotY;
+      p[i] = {
+        x: q.x * c + q.z * s2,
+        y: pivotY + dy,
+        z: -q.x * s2 + q.z * c,
+        visibility: q.visibility,
+      };
+    }
+  }
 
   return p;
 }
@@ -251,6 +281,142 @@ for (const distance of [0.55, 1.2]) {
     f / 2 / distance,
     (f / 2 / distance) * 0.05,
   );
+}
+
+console.log("\n— Turning the head only ——————————————————————————");
+
+/**
+ * A necklace must not move when only the head turns.
+ *
+ * It sits on the base of the neck, which is part of the torso, and looking over your
+ * shoulder does not move your collarbones. But every head landmark sits well
+ * forward of the neck's axis, so all of them swing a long way — and the frame used
+ * to take its up-axis, its neck length and its depth from the midpoint of the mouth
+ * corners. The whole collar therefore tilted, rose and shifted with the head, which
+ * is the fault being fixed here.
+ */
+{
+  // Settle facing forward first, so the neck length has been measured from a square
+  // frame and latched, exactly as it would be in use.
+  const solver = new NecklacePoseSolver();
+  const forwardResult = {
+    landmarks: [project(makeBody(), DISTANCE, ASPECT)],
+    worldLandmarks: [makeBody()],
+    segmentationMasks: undefined,
+  };
+  let frame = 0;
+  let base = null;
+  for (let i = 0; i < 200; i++) {
+    base = solver.solve(forwardResult as never, geometry, options, frame++ * (1000 / 30));
+  }
+
+  const reference = {
+    x: base!.position.x,
+    y: base!.position.y,
+    neck: base!.neckRadiusMm,
+    length: base!.neckLengthMm,
+    up: new Vector3(0, 1, 0).applyQuaternion(base!.quaternion),
+  };
+
+  let worstShift = 0;
+  let worstTilt = 0;
+  let worstNeck = 0;
+  let worstLength = 0;
+
+  for (const deg of [-90, -60, -30, 30, 60, 90]) {
+    const world = makeBody(1, 1, (deg * Math.PI) / 180);
+    const result = {
+      landmarks: [project(world, DISTANCE, ASPECT)],
+      worldLandmarks: [world],
+      segmentationMasks: undefined,
+    };
+    let p = null;
+    for (let i = 0; i < 90; i++) {
+      p = solver.solve(result as never, geometry, options, frame++ * (1000 / 30));
+    }
+
+    const shift = Math.hypot(p!.position.x - reference.x, p!.position.y - reference.y);
+    const up = new Vector3(0, 1, 0).applyQuaternion(p!.quaternion);
+    const tilt = (up.angleTo(reference.up) * 180) / Math.PI;
+
+    worstShift = Math.max(worstShift, shift);
+    worstTilt = Math.max(worstTilt, tilt);
+    worstNeck = Math.max(worstNeck, Math.abs(p!.neckRadiusMm - reference.neck));
+    worstLength = Math.max(worstLength, Math.abs(p!.neckLengthMm - reference.length));
+  }
+
+  // Tolerances as a fraction of the neck, which is what "visibly moved" means here.
+  const shiftLimit = base!.neckRadius * 0.12;
+  console.log(
+    `       worst over ±90° of head yaw: shift ${worstShift.toFixed(5)} (limit ${shiftLimit.toFixed(5)}), tilt ${worstTilt.toFixed(2)}°`,
+  );
+  console.log(
+    `       neck width moved ${worstNeck.toFixed(2)} mm, neck length moved ${worstLength.toFixed(2)} mm`,
+  );
+
+  checkTrue("the collar does not move when the head turns", worstShift < shiftLimit);
+  checkTrue("the collar does not tilt when the head turns", worstTilt < 3);
+  checkTrue("the measured neck width holds when the head turns", worstNeck < 3);
+  checkTrue("the latched neck length holds when the head turns", worstLength < 4);
+}
+
+console.log("\n— Hips out of frame ——————————————————————————————");
+
+/**
+ * The framing a necklace try-on actually gets: head and shoulders, no hips.
+ *
+ * The torso's up-axis comes from the hips when they are visible, and Pose Landmarker
+ * reports all 33 landmarks on every frame whether or not it can see them — filling
+ * the rest in by inference. So the hips arrive as a plausible-looking guess, and
+ * trusting it would mean building the frame on invented data. This checks the
+ * visibility gate catches that and the gravity fallback holds up, including through
+ * a head turn.
+ */
+{
+  const cropped = (headYaw = 0) =>
+    makeBody(1, 1, headYaw).map((p, i) =>
+      i === PL.LEFT_HIP || i === PL.RIGHT_HIP ? { ...p, visibility: 0.2 } : p,
+    );
+
+  const square = settle(cropped());
+  if (!square) {
+    failures++;
+    console.log("FAIL  no pose with the hips cropped out");
+  } else {
+    const up = new Vector3(0, 1, 0).applyQuaternion(square.quaternion);
+    const across = new Vector3(1, 0, 0).applyQuaternion(square.quaternion);
+    const forward = new Vector3(0, 0, 1).applyQuaternion(square.quaternion);
+
+    console.log(
+      `       fallback frame: up (${up.x.toFixed(2)}, ${up.y.toFixed(2)}, ${up.z.toFixed(2)})`,
+    );
+    check("the fallback up-axis still points up the screen", up.y, 1, 0.06);
+    checkTrue("the fallback still faces the viewer", forward.z > 0.9);
+    check(
+      "the fallback basis is still right-handed",
+      across.clone().cross(up).dot(forward),
+      1,
+      0.02,
+    );
+
+    // And it must still be head-independent, which is the whole point.
+    let worst = 0;
+    for (const deg of [-90, 90]) {
+      const turned = settle(cropped((deg * Math.PI) / 180));
+      worst = Math.max(
+        worst,
+        Math.hypot(
+          turned!.position.x - square.position.x,
+          turned!.position.y - square.position.y,
+        ),
+      );
+    }
+    console.log(`       worst shift with hips cropped and head at ±90°: ${worst.toFixed(5)}`);
+    checkTrue(
+      "the fallback frame is head-independent too",
+      worst < square.neckRadius * 0.12,
+    );
+  }
 }
 
 console.log("\n— Changing the zoom mid-session ———————————————————");

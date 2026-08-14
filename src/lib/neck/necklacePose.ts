@@ -11,6 +11,7 @@ import {
   REQUIRED_LANDMARKS,
 } from "./landmarks";
 import { estimateNeckPlaneScale } from "./scale";
+import { MedianTracker } from "@/lib/hand/measure";
 
 export type NecklacePose = {
   /** Where the chain crosses the base of the neck, on the anchor plane. */
@@ -116,6 +117,12 @@ const NOTCH_FROM_NECK_LENGTH = 0.2;
 const MIN_EAR_SPAN_RATIO = 0.28;
 const MAX_EAR_SPAN_RATIO = 0.52;
 
+/** Fallback neck length, used only until a square-on frame has been seen. */
+const NOMINAL_NECK_LENGTH_MM = 150;
+
+/** Up, in the metric world frame, once y-down has been flipped to y-up. */
+const WORLD_UP = new Vector3(0, 1, 0);
+
 const scratch = {
   planar: Array.from({ length: POSE_LANDMARK_COUNT }, () => ({ x: 0, y: 0 })),
   world: Array.from({ length: POSE_LANDMARK_COUNT }, () => ({ x: 0, y: 0, z: 0 })),
@@ -124,6 +131,7 @@ const scratch = {
   right: new Vector3(),
   shoulderMid: new Vector3(),
   headMid: new Vector3(),
+  upWorld: new Vector3(),
   across: new Vector3(),
   up: new Vector3(),
   forward: new Vector3(),
@@ -167,6 +175,16 @@ export class NecklacePoseSolver {
    */
   private lastZoom = 1;
 
+  /**
+   * The wearer's neck length in millimetres, collected only from frames where the
+   * head was square enough to measure it. Held through the rest, because a neck
+   * does not change length when someone turns their head.
+   */
+  private neckLengthTracker = new MedianTracker(60);
+
+  /** Per-landmark visibility from the most recent frame. */
+  private visibility: number[] = [];
+
   readonly pose: NecklacePose = {
     position: new Vector3(),
     quaternion: new Quaternion(),
@@ -187,6 +205,7 @@ export class NecklacePoseSolver {
     this.planarFilter.reset();
     this.worldFilter.reset();
     this.scaleFilter.reset();
+    this.neckLengthTracker.reset();
     this.lastTimestamp = null;
   }
 
@@ -234,6 +253,10 @@ export class NecklacePoseSolver {
       for (let i = 0; i < this.planarSmoothed.length; i++) this.planarSmoothed[i] *= factor;
       for (let i = 0; i < this.scaleSmoothed.length; i++) this.scaleSmoothed[i] *= factor;
       this.lastZoom = zoom;
+    }
+
+    for (let i = 0; i < POSE_LANDMARK_COUNT; i++) {
+      this.visibility[i] = (landmarks[i] as { visibility?: number }).visibility ?? 1;
     }
 
     this.project(landmarks, geometry);
@@ -304,6 +327,19 @@ export class NecklacePoseSolver {
     return Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z);
   }
 
+  /**
+   * Whether the model is confident it can actually see a landmark.
+   *
+   * Pose Landmarker reports every one of its 33 points on every frame whether or
+   * not they are in view, filling the rest in by inference — so for anything
+   * outside the crop, like the hips in a head-and-shoulders shot, the coordinates
+   * are a guess. Treating a guess as a measurement is worse than not having one.
+   */
+  private visible(index: number): boolean {
+    const v = this.visibility[index];
+    return v === undefined || v > 0.6;
+  }
+
   private planarAt(index: number, out: Vector3): Vector3 {
     return out.set(scratch.planar[index].x, scratch.planar[index].y, 0);
   }
@@ -334,17 +370,6 @@ export class NecklacePoseSolver {
     scratch.shoulderMid.addVectors(scratch.left, scratch.right).multiplyScalar(0.5);
     pose.shoulderSpan = scratch.left.distanceTo(scratch.right);
 
-    // Head direction from the mouth corners rather than the nose: the nose swings
-    // a long way as the head turns, while the mouth's midpoint stays close to the
-    // neck's own axis, which is what the chain actually follows.
-    this.planarAt(PL.LEFT_MOUTH, scratch.a);
-    this.planarAt(PL.RIGHT_MOUTH, scratch.b);
-    scratch.headMid.addVectors(scratch.a, scratch.b).multiplyScalar(0.5);
-
-    scratch.up.subVectors(scratch.headMid, scratch.shoulderMid);
-    if (scratch.up.lengthSq() < 1e-10) scratch.up.set(0, 1, 0);
-    scratch.up.normalize();
-
     // --- Neck width: two independent cues, in millimetres ------------------
     const earSpanM = this.worldDistance(PL.LEFT_EAR, PL.RIGHT_EAR);
     const ratio = shoulderWorldM > 0 ? earSpanM / shoulderWorldM : 0;
@@ -368,17 +393,6 @@ export class NecklacePoseSolver {
         ? (neckRadiusMm / 1000) * planeScale
         : pose.shoulderSpan * NECK_RADIUS_FROM_SHOULDERS * anchor.sizeMultiplier;
 
-    // --- Where the chain crosses, from the neck's own length ---------------
-    // The distance up to the mouth is essentially neck plus a fixed bit of jaw, so
-    // a fraction of it lands at the sternal notch on a short neck and a long one
-    // alike. A fraction of shoulder breadth cannot: breadth says nothing about how
-    // long a neck is.
-    const neckLength = scratch.shoulderMid.distanceTo(scratch.headMid);
-    pose.neckLengthMm = planeScale > 0 ? (neckLength / planeScale) * 1000 : 0;
-
-    const rise = neckLength * NOTCH_FROM_NECK_LENGTH + pose.neckRadius * anchor.riseOffset;
-    pose.position.copy(scratch.shoulderMid).addScaledVector(scratch.up, rise);
-
     // --- Orientation -------------------------------------------------------
     // Built from the metric landmarks, so it stays a true frame as the torso
     // turns rather than skewing with the stage's aspect ratio.
@@ -390,16 +404,35 @@ export class NecklacePoseSolver {
     if (scratch.across.lengthSq() < 1e-10) return pose;
     scratch.across.normalize();
 
-    this.worldAt(PL.LEFT_MOUTH, scratch.a);
-    this.worldAt(PL.RIGHT_MOUTH, scratch.b);
+    // Up the torso. The hips give this directly when they are in frame; for the
+    // head-and-shoulders framing a necklace try-on usually has, they are not, and
+    // the fallback is the world's own up made perpendicular to the shoulder line.
+    //
+    // Either way it is a torso measurement. Deriving it from the mouth — as this
+    // did — is what let head rotation swing the whole piece.
+    this.worldAt(PL.LEFT_HIP, scratch.a);
+    this.worldAt(PL.RIGHT_HIP, scratch.b);
     scratch.headMid.addVectors(scratch.a, scratch.b).multiplyScalar(0.5);
     this.worldAt(PL.LEFT_SHOULDER, scratch.a);
     this.worldAt(PL.RIGHT_SHOULDER, scratch.b);
     scratch.shoulderMid.addVectors(scratch.a, scratch.b).multiplyScalar(0.5);
 
-    scratch.up.subVectors(scratch.headMid, scratch.shoulderMid);
-    if (scratch.up.lengthSq() < 1e-10) scratch.up.set(0, 1, 0);
-    scratch.up.normalize();
+    const hipsVisible =
+      this.visible(PL.LEFT_HIP) &&
+      this.visible(PL.RIGHT_HIP) &&
+      scratch.shoulderMid.distanceTo(scratch.headMid) > 0.12;
+
+    if (hipsVisible) {
+      scratch.up.subVectors(scratch.shoulderMid, scratch.headMid).normalize();
+    } else {
+      // Gravity, less whatever component runs along the shoulders. A leaning torso
+      // tilts the shoulder line, and this tilts with it.
+      scratch.up
+        .copy(WORLD_UP)
+        .addScaledVector(scratch.across, -WORLD_UP.dot(scratch.across));
+      if (scratch.up.lengthSq() < 1e-8) scratch.up.copy(WORLD_UP);
+      scratch.up.normalize();
+    }
 
     // Anterior direction: out of the chest, the way the pendant faces.
     scratch.forward.crossVectors(scratch.across, scratch.up);
@@ -419,8 +452,53 @@ export class NecklacePoseSolver {
       scratch.across.crossVectors(scratch.up, scratch.forward).normalize();
     }
 
+    scratch.upWorld.copy(scratch.up);
     scratch.basis.makeBasis(scratch.across, scratch.up, scratch.forward);
     pose.quaternion.setFromRotationMatrix(scratch.basis);
+
+    // --- Where the chain crosses, in screen space --------------------------
+    //
+    // The direction up the neck *on screen* is the world up-axis with its depth
+    // dropped — both spaces are image-aligned, so the world axis's x and y are
+    // already the screen direction. Taking it from the world basis rather than
+    // recomputing it here matters: a perpendicular to the shoulder line in the image
+    // plane collapses when the shoulders go edge-on at a quarter turn, and the
+    // solve would bail out at exactly the pose it most needs to handle.
+    scratch.up.set(scratch.upWorld.x, scratch.upWorld.y, 0);
+    if (scratch.up.lengthSq() < 1e-8) scratch.up.set(0, 1, 0);
+    scratch.up.normalize();
+
+    // A fraction of the neck's length lands at the sternal notch on a short neck
+    // and a long one alike, where a fraction of shoulder breadth cannot — breadth
+    // says nothing about how long a neck is.
+    //
+    // But the only way to see the top of a neck is to measure to the head, and the
+    // head moves independently of it. So the length is **measured when the head is
+    // square and held otherwise**: the same gate the width cue uses, and the same
+    // pattern as the ring's latched dorsal sign. Someone's neck does not get longer
+    // when they look sideways, so remembering it is not merely a smoothing trick —
+    // it is the physically correct thing to do.
+    this.planarAt(PL.LEFT_MOUTH, scratch.a);
+    this.planarAt(PL.RIGHT_MOUTH, scratch.b);
+    scratch.headMid.addVectors(scratch.a, scratch.b).multiplyScalar(0.5);
+
+    if (earUsable && planeScale > 0) {
+      // Stored in millimetres, which is head-pose-independent and also survives the
+      // wearer moving closer to or further from the camera.
+      const seenMm = (scratch.shoulderMid.distanceTo(scratch.headMid) / planeScale) * 1000;
+      if (seenMm > 60 && seenMm < 320) this.neckLengthTracker.push(seenMm);
+    }
+    const heldMm = this.neckLengthTracker.value;
+    pose.neckLengthMm = heldMm ?? NOMINAL_NECK_LENGTH_MM;
+
+    // Converted back to plane units through the current scale, so the collar keeps
+    // its place as the wearer moves nearer or further away.
+    const riseUnits =
+      planeScale > 0 ? (pose.neckLengthMm / 1000) * planeScale : pose.shoulderSpan * 0.16;
+
+    const rise = riseUnits * NOTCH_FROM_NECK_LENGTH + pose.neckRadius * anchor.riseOffset;
+    pose.position.copy(scratch.shoulderMid).addScaledVector(scratch.up, rise);
+
 
     // How square-on the shoulders are. In profile the span collapses and a
     // necklace should mostly disappear behind the neck.
