@@ -28,6 +28,8 @@ export type NecklacePose = {
   neckLengthMm: number;
   /** True when the head-breadth cue was usable and folded into the estimate. */
   neckFromHead: boolean;
+  /** How far the head is turned relative to the shoulders, in degrees. */
+  headTurnDeg: number;
   /** Shoulder-to-shoulder span, in anchor-plane units. */
   shoulderSpan: number;
   /** Measured shoulder breadth in millimetres, for sizing chain lengths. */
@@ -117,6 +119,17 @@ const NOTCH_FROM_NECK_LENGTH = 0.2;
 const MIN_EAR_SPAN_RATIO = 0.28;
 const MAX_EAR_SPAN_RATIO = 0.52;
 
+/**
+ * How far the head may be turned before each measurement stops being trusted.
+ *
+ * The two limits differ because the measurements are not equally pose-sensitive. The
+ * ears straddle the neck's axis, so an occluded one only starts to matter at a large
+ * angle. The mouth sits well *forward* of that axis, so the shoulder-to-mouth
+ * distance — the neck's length — starts changing almost immediately.
+ */
+const MAX_HEAD_TURN_FOR_WIDTH_DEG = 38;
+const MAX_HEAD_TURN_FOR_LENGTH_DEG = 12;
+
 /** Fallback neck length, used only until a square-on frame has been seen. */
 const NOMINAL_NECK_LENGTH_MM = 150;
 
@@ -132,6 +145,10 @@ const scratch = {
   shoulderMid: new Vector3(),
   headMid: new Vector3(),
   upWorld: new Vector3(),
+  shoulderWorld: new Vector3(),
+  hipWorld: new Vector3(),
+  earAcross: new Vector3(),
+  shoulderAcross: new Vector3(),
   across: new Vector3(),
   up: new Vector3(),
   forward: new Vector3(),
@@ -193,6 +210,7 @@ export class NecklacePoseSolver {
     neckCircumferenceMm: 360,
     neckLengthMm: 150,
     neckFromHead: false,
+    headTurnDeg: 0,
     shoulderSpan: 0.35,
     shoulderWidthMm: NOMINAL_SHOULDER_WIDTH_MM,
     planeScale: 1,
@@ -370,10 +388,36 @@ export class NecklacePoseSolver {
     scratch.shoulderMid.addVectors(scratch.left, scratch.right).multiplyScalar(0.5);
     pose.shoulderSpan = scratch.left.distanceTo(scratch.right);
 
+    // --- How far the head is turned, relative to the torso -----------------
+    //
+    // From the ear line against the shoulder line. Both are rigid, so the angle
+    // between them is head yaw and nothing else — it does not move when the whole
+    // body turns, or when the wearer moves nearer the camera.
+    //
+    // The obvious-looking alternative, watching the ear span shrink, does not work:
+    // the span is a distance between two metric points, and a rigid rotation leaves
+    // any such distance unchanged. A gate built on it therefore never fires at all,
+    // which is what allowed turned frames into the neck-length estimate.
+    this.worldAt(PL.LEFT_EAR, scratch.a);
+    this.worldAt(PL.RIGHT_EAR, scratch.b);
+    scratch.earAcross.subVectors(scratch.a, scratch.b);
+    this.worldAt(PL.LEFT_SHOULDER, scratch.a);
+    this.worldAt(PL.RIGHT_SHOULDER, scratch.b);
+    scratch.shoulderAcross.subVectors(scratch.a, scratch.b);
+
+    const headTurnRad =
+      scratch.earAcross.lengthSq() > 1e-8 && scratch.shoulderAcross.lengthSq() > 1e-8
+        ? scratch.earAcross.angleTo(scratch.shoulderAcross)
+        : 0;
+    pose.headTurnDeg = (headTurnRad * 180) / Math.PI;
+
     // --- Neck width: two independent cues, in millimetres ------------------
     const earSpanM = this.worldDistance(PL.LEFT_EAR, PL.RIGHT_EAR);
     const ratio = shoulderWorldM > 0 ? earSpanM / shoulderWorldM : 0;
-    const earUsable = ratio > MIN_EAR_SPAN_RATIO && ratio < MAX_EAR_SPAN_RATIO;
+    const earUsable =
+      ratio > MIN_EAR_SPAN_RATIO &&
+      ratio < MAX_EAR_SPAN_RATIO &&
+      pose.headTurnDeg < MAX_HEAD_TURN_FOR_WIDTH_DEG;
 
     const fromShoulders = pose.shoulderWidthMm * NECK_RADIUS_FROM_SHOULDERS;
     const fromHead = earSpanM * 1000 * NECK_RADIUS_FROM_HEAD;
@@ -410,20 +454,24 @@ export class NecklacePoseSolver {
     //
     // Either way it is a torso measurement. Deriving it from the mouth — as this
     // did — is what let head rotation swing the whole piece.
+    // These go in their own slots. `shoulderMid` already holds the *plane*
+    // midpoint from further up, and the anchor's position is built from it — so
+    // reusing it for the metric one silently reinterpreted metres as plane units
+    // and put the whole necklace at the centre of the frame instead of on the neck.
     this.worldAt(PL.LEFT_HIP, scratch.a);
     this.worldAt(PL.RIGHT_HIP, scratch.b);
-    scratch.headMid.addVectors(scratch.a, scratch.b).multiplyScalar(0.5);
+    scratch.hipWorld.addVectors(scratch.a, scratch.b).multiplyScalar(0.5);
     this.worldAt(PL.LEFT_SHOULDER, scratch.a);
     this.worldAt(PL.RIGHT_SHOULDER, scratch.b);
-    scratch.shoulderMid.addVectors(scratch.a, scratch.b).multiplyScalar(0.5);
+    scratch.shoulderWorld.addVectors(scratch.a, scratch.b).multiplyScalar(0.5);
 
     const hipsVisible =
       this.visible(PL.LEFT_HIP) &&
       this.visible(PL.RIGHT_HIP) &&
-      scratch.shoulderMid.distanceTo(scratch.headMid) > 0.12;
+      scratch.shoulderWorld.distanceTo(scratch.hipWorld) > 0.12;
 
     if (hipsVisible) {
-      scratch.up.subVectors(scratch.shoulderMid, scratch.headMid).normalize();
+      scratch.up.subVectors(scratch.shoulderWorld, scratch.hipWorld).normalize();
     } else {
       // Gravity, less whatever component runs along the shoulders. A leaning torso
       // tilts the shoulder line, and this tilts with it.
@@ -482,9 +530,10 @@ export class NecklacePoseSolver {
     this.planarAt(PL.RIGHT_MOUTH, scratch.b);
     scratch.headMid.addVectors(scratch.a, scratch.b).multiplyScalar(0.5);
 
-    if (earUsable && planeScale > 0) {
-      // Stored in millimetres, which is head-pose-independent and also survives the
-      // wearer moving closer to or further from the camera.
+    if (pose.headTurnDeg < MAX_HEAD_TURN_FOR_LENGTH_DEG && planeScale > 0) {
+      // Both points are on the anchor plane — mixing a metric point with a plane one
+      // here produced a neck several times too long, and it is the same class of
+      // mistake as the anchor collision above.
       const seenMm = (scratch.shoulderMid.distanceTo(scratch.headMid) / planeScale) * 1000;
       if (seenMm > 60 && seenMm < 320) this.neckLengthTracker.push(seenMm);
     }

@@ -50,6 +50,19 @@ function makeBody(
     visibility: 0.99,
   }));
 
+  /**
+   * Everything is offset off the optical axis, deliberately.
+   *
+   * A body centred in frame puts the shoulder midpoint at the origin in *both* the
+   * metric world space and the anchor-plane space, which makes those two spaces
+   * numerically indistinguishable there — so a bug that confuses one for the other
+   * is invisible. Exactly that happened: a refactor reused one scratch vector for
+   * both midpoints, the necklace was drawn at the centre of the frame instead of on
+   * the neck, and the whole suite still passed.
+   *
+   * Sitting the body low and a little to one side is also how someone actually
+   * appears in a head-and-shoulders shot.
+   */
   const set = (i: number, x: number, yUp: number, zToward: number) => {
     p[i] = { x, y: -yUp, z: -zToward, visibility: 0.99 };
   };
@@ -100,7 +113,33 @@ function makeBody(
     }
   }
 
-  return p;
+  // Offset applied last, so every rotation above happens about the body's own axis
+  // rather than about the frame's centre.
+  return offsetBody(p);
+}
+
+/**
+ * Shifts a body off the optical axis.
+ *
+ * Applied to every fixture, deliberately. A body centred in frame puts the shoulder
+ * midpoint at the origin in *both* the metric world space and the anchor-plane
+ * space, which makes those two spaces numerically indistinguishable there — so a bug
+ * that confuses one for the other is invisible. Exactly that happened: a refactor
+ * reused one scratch vector for both midpoints, the necklace was drawn at the centre
+ * of the frame instead of on the neck, and the whole suite still passed.
+ *
+ * Sitting low and a little to one side is also how someone actually appears in a
+ * head-and-shoulders shot.
+ */
+const BODY_OFFSET = { x: 0.045, yUp: -0.085 };
+
+function offsetBody<T extends { x: number; y: number; z: number }>(body: T[]): T[] {
+  return body.map((q) => ({ ...q, x: q.x + BODY_OFFSET.x, y: q.y - BODY_OFFSET.yUp }));
+}
+
+/** Undoes the offset, so a fixture can be rotated about the body's own axis. */
+function centreBody<T extends { x: number; y: number; z: number }>(body: T[]): T[] {
+  return body.map((q) => ({ ...q, x: q.x - BODY_OFFSET.x, y: q.y + BODY_OFFSET.yUp }));
 }
 
 /** Projects the metric body through a pinhole camera to normalized image coords. */
@@ -211,6 +250,33 @@ console.log(
 checkTrue("the anchor sits above the shoulder line", pose.position.y > shoulderMid.y);
 checkTrue("the anchor sits below the mouth", pose.position.y < mouthMid.y);
 check("the anchor is centred between the shoulders", pose.position.x, shoulderMid.x, 0.004);
+
+// Pinned exactly, not merely bracketed.
+//
+// The three checks above are all satisfiable by accident, and were: a refactor
+// reused one scratch vector for both the plane-space and metric shoulder midpoints,
+// so the anchor came out in metres and landed near the frame's origin — with the
+// necklace nowhere near the wearer's neck. The numbers still happened to fall
+// between the shoulder line and the mouth, so every assertion passed. Anchoring the
+// expected value to the *plane* shoulder midpoint is what makes that impossible:
+// a position computed in the wrong space cannot agree with it.
+const expectedRise = (pose.neckLengthMm / 1000) * pose.planeScale * 0.2;
+check(
+  "the anchor is exactly one notch-height above the plane shoulder midpoint",
+  pose.position.y,
+  shoulderMid.y + expectedRise,
+  0.003,
+);
+// And it has to be near the shoulders at all — a couple of neck radii, not a
+// fraction of the frame away.
+console.log(
+  `       anchor is ${Math.hypot(pose.position.x - shoulderMid.x, pose.position.y - shoulderMid.y).toFixed(4)} from the shoulder midpoint (neck radius ${pose.neckRadius.toFixed(4)})`,
+);
+checkTrue(
+  "the anchor is within a neck's reach of the shoulders",
+  Math.hypot(pose.position.x - shoulderMid.x, pose.position.y - shoulderMid.y) <
+    pose.neckRadius * 3,
+);
 
 // Neck radius against the anthropometric expectation. A 395 mm shoulder breadth
 // implies a neck a little under 60 mm in radius.
@@ -520,12 +586,14 @@ console.log("\n— A full turn ————————————————�
 
   for (let i = 0; i <= STEPS; i++) {
     const a = (i / STEPS) * Math.PI * 2;
-    const turned = makeBody().map((p) => ({
-      x: p.x * Math.cos(a) + p.z * Math.sin(a),
-      y: p.y,
-      z: -p.x * Math.sin(a) + p.z * Math.cos(a),
-      visibility: p.visibility,
-    }));
+    const turned = offsetBody(
+      centreBody(makeBody()).map((p) => ({
+        x: p.x * Math.cos(a) + p.z * Math.sin(a),
+        y: p.y,
+        z: -p.x * Math.sin(a) + p.z * Math.cos(a),
+        visibility: p.visibility,
+      })),
+    );
 
     const p = settle(turned, options, geometry, 120);
     if (!p) {
