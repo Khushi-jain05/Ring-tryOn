@@ -17,6 +17,7 @@ import { dropFactorFor, type Necklace } from "@/lib/jewellery/catalog";
 import { Necklace3D } from "./Necklace3D";
 import { NeckOccluder } from "./NeckOccluder";
 import { NECK_OCCLUDER } from "@/lib/jewellery/fit";
+import { clearNeckDebug, publishNeckDebug } from "@/lib/neck/debugBus";
 
 /** Frames the upper body may go missing before the piece is hidden. */
 const MISS_GRACE_FRAMES = 8;
@@ -195,10 +196,15 @@ export function TrackedNecklace({
           neckRadiusUnits * NECK_RISE,
         );
 
+      if (state.showDiagnostics) {
+        publishNeckDebug(pose, dropFactorFor(necklace, neckRadiusMm) * unitsPerMm * neckRadiusMm, now);
+      }
+
       if (state.status !== "tracking") setStatus("tracking");
     } else if (++missCount.current > MISS_GRACE_FRAMES) {
       group.visible = false;
       occluder.scale.setScalar(0);
+      clearNeckDebug();
       if (state.status === "tracking") setStatus("searching");
     }
 

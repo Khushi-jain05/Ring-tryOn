@@ -130,6 +130,14 @@ const MAX_EAR_SPAN_RATIO = 0.52;
 const MAX_HEAD_TURN_FOR_WIDTH_DEG = 38;
 const MAX_HEAD_TURN_FOR_LENGTH_DEG = 12;
 
+/**
+ * How far forward of the shoulder line the chain crosses, in neck radii.
+ *
+ * The acromion sits at the side of the torso and the sternal notch at the front
+ * centre, so the notch is a little nearer the camera when someone faces it.
+ */
+const NOTCH_FORWARD_OF_SHOULDERS = 0.35;
+
 /** Fallback neck length, used only until a square-on frame has been seen. */
 const NOMINAL_NECK_LENGTH_MM = 150;
 
@@ -553,17 +561,16 @@ export class NecklacePoseSolver {
     // necklace should mostly disappear behind the neck.
     pose.facing = Math.sqrt(Math.max(0, 1 - scratch.across.z * scratch.across.z));
 
-    // Depth of the neck relative to the shoulder line, so the chain can sit in
-    // the same 3D space as the neck occluder rather than flat on the plane.
-    if (planeScale > 0) {
-      const shoulderZ =
-        (scratch.world[PL.LEFT_SHOULDER].z + scratch.world[PL.RIGHT_SHOULDER].z) / 2;
-      const neckZ =
-        (scratch.world[PL.LEFT_MOUTH].z + scratch.world[PL.RIGHT_MOUTH].z) / 2;
-      pose.anchorDepth = (neckZ - shoulderZ) * planeScale * 0.5;
-    } else {
-      pose.anchorDepth = 0;
-    }
+    // Depth of the neck, so the chain sits in the same 3D space as the occluder
+    // rather than flat on the plane.
+    //
+    // Taken forward of the shoulder line by a fraction of the neck's own radius,
+    // which is where the sternal notch sits relative to the shoulder joints. This
+    // used to interpolate toward the *mouth's* depth — the last place head pose was
+    // still leaking into the placement. Turning the head moves the mouth forward and
+    // back, so the collar shifted in depth, and because depth is compensated back
+    // into screen position it shifted on screen too.
+    pose.anchorDepth = pose.neckRadius * NOTCH_FORWARD_OF_SHOULDERS;
 
     return pose;
   }

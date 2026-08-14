@@ -15,6 +15,7 @@ import { useCamera } from "./useCamera";
 import { CameraGate } from "./CameraGate";
 import { TrackingHud } from "./TrackingHud";
 import { DebugOverlay } from "./DebugOverlay";
+import { NeckDebugOverlay } from "./NeckDebugOverlay";
 import { CardCalibration } from "./CardCalibration";
 
 /**
@@ -177,7 +178,7 @@ export function TryOnStage({ ring }: { ring: Ring }) {
         )}
       </Canvas>
 
-      <DebugOverlay />
+      {mode === "necklace" ? <NeckDebugOverlay /> : <DebugOverlay />}
       <TrackingHud onCapture={capture} />
       <CardCalibration stageWidth={stage.width} stageHeight={stage.height} />
 
