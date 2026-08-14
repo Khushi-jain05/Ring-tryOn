@@ -1,5 +1,5 @@
 import { BufferGeometry, CatmullRomCurve3, TorusGeometry, Vector3 } from "three";
-import { mergeInto, ribbonProfile, sweepProfile } from "./necklace";
+import { mergeInto, ribbonProfile, sweepProfile } from "./sweep";
 
 /**
  * A heavy American-diamond collar: a wide band of densely set colourless stones

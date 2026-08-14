@@ -7,7 +7,7 @@ import { NecklaceDetail } from "@/components/site/NecklaceDetail";
 export const metadata: Metadata = {
   title: "Necklaces",
   description:
-    "Aurelia's pendants, modelled in 3D and viewable on your own neck through your camera.",
+    "Aurelia's necklaces, modelled in 3D and viewable on your own neck through your camera.",
 };
 
 export default function NecklacesPage() {
@@ -16,7 +16,7 @@ export default function NecklacesPage() {
       <header className="max-w-2xl">
         <h1 className="font-display text-4xl sm:text-5xl">Necklaces</h1>
         <p className="mt-4 text-sm leading-relaxed text-muted">
-          Spin each pendant to see it from any angle. Try-on shows it at the size
+          Spin each piece to see it from any angle. Try-on shows it at the size
           it really is on your neck, which is small — this is where the design
           itself can actually be looked at.
         </p>

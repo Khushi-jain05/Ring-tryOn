@@ -1,5 +1,3 @@
-import { INFINITY_HEART, type NecklaceSpec } from "./necklace";
-
 /**
  * How the neck occluder is sized and placed, in neck radii.
  *
@@ -29,24 +27,4 @@ export function occluderExtent(): { bottom: number; top: number } {
     bottom: NECK_OCCLUDER.rise - half,
     top: NECK_OCCLUDER.rise + half,
   };
-}
-
-/**
- * How far below the anchor the pendant's bail hangs, in neck radii.
- *
- * The chain's drop is expressed in neck radii by the anchor's `dropFactor`, so
- * this is just that — but naming it makes the comparison against the occluder
- * legible, which is the whole point.
- */
-export function pendantTop(dropFactor: number): number {
-  return -dropFactor;
-}
-
-/** Lowest point of the pendant, in neck radii, including its full drop. */
-export function pendantBottom(
-  dropFactor: number,
-  neckRadiusMm: number,
-  spec: NecklaceSpec = INFINITY_HEART,
-): number {
-  return -dropFactor - spec.dropMm / neckRadiusMm;
 }

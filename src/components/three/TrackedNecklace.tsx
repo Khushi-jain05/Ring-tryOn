@@ -84,7 +84,6 @@ export function TrackedNecklace({
   const neckSize = useTryOnStore((s) => s.neckSizeMm);
   const setNeckSize = useTryOnStore((s) => s.setNeckSizeMm);
   const setNeckReading = useTryOnStore((s) => s.setNeckReading);
-  const anchor = useTryOnStore((s) => s.necklaceAnchor);
 
   const { size } = useThree();
   const setStatus = useTryOnStore((s) => s.setStatus);
@@ -217,11 +216,6 @@ export function TrackedNecklace({
     }
   });
 
-  // A choker's drop comes from the piece itself — its own dip plus the drop pearl —
-  // whereas a pendant's is the chain length. The anchor's factor then only trims
-  // that, rather than defining it, which is what stops a choker being placed
-  // somewhere near the sternum.
-  const dropMm = neckSize * dropFactorFor(necklace, neckSize) * anchor.dropFactor;
 
   return (
     <>
@@ -229,11 +223,9 @@ export function TrackedNecklace({
       <group ref={groupRef} visible={false}>
         <Necklace3D
           metal={metal}
-          gem={necklace.gem}
           quality="live"
           neckRadiusMm={neckSize}
-          dropMm={dropMm}
-          style={necklace.style}
+          spec={necklace.spec}
         />
       </group>
     </>

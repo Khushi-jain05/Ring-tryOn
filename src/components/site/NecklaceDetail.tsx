@@ -19,30 +19,23 @@ export function NecklaceDetail({
   const [metal, setMetal] = useState<MetalId>(necklace.metals[0]);
   const metals = metalOrder.filter((m) => necklace.metals.includes(m));
 
-  const specs: [string, string][] =
-    necklace.style.kind === "collar"
-      ? [
-          ["Band width", `${necklace.style.spec.bandWidthMm.toFixed(1)} mm`],
-          ["Main stones", `${necklace.style.spec.mainStoneMm.toFixed(1)} mm round`],
-          ["Clusters", `${necklace.style.spec.clusterCount}, claw-set`],
-          ["Drops", `${necklace.style.spec.dropCount} pear, ${necklace.style.spec.dropStoneMm.toFixed(1)} mm`],
-          ["Length", "Collar — follows the neckline"],
-        ]
-      : [
-          ["Pendant height", `${necklace.style.spec.dropMm.toFixed(1)} mm`],
-          ["Heart width", `${(necklace.style.spec.heartHalfWidthMm * 2).toFixed(1)} mm`],
-          ["Pavé stones", String(necklace.style.spec.paveCount)],
-          ["Chain link", `${necklace.style.spec.chainLinkMm.toFixed(1)} mm cable`],
-          ["Length", "Princess — falls to the sternum"],
-        ];
+  const specs: [string, string][] = [
+    ["Band width", `${necklace.spec.bandWidthMm.toFixed(1)} mm`],
+    ["Main stones", `${necklace.spec.mainStoneMm.toFixed(1)} mm round`],
+    ["Clusters", `${necklace.spec.clusterCount}, claw-set`],
+    [
+      "Drops",
+      `${necklace.spec.dropCount} pear, ${necklace.spec.dropStoneMm.toFixed(1)} mm`,
+    ],
+    ["Length", "Collar — follows the neckline"],
+  ];
 
   return (
     <section className="grid gap-10 lg:grid-cols-2">
       <div className="overflow-hidden rounded-3xl bg-surface-muted">
         <NecklaceViewer
           metal={metal}
-          gem={necklace.gem}
-          style={necklace.style}
+          spec={necklace.spec}
           className="aspect-square w-full"
         />
         <p className="pb-4 text-center text-xs text-muted">

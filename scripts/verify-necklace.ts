@@ -17,12 +17,7 @@ import {
 import { PL, POSE_LANDMARK_COUNT } from "../src/lib/neck/landmarks";
 import { DEFAULT_ONE_EURO } from "../src/lib/hand/oneEuro";
 import { ANCHOR_DISTANCE, CAMERA_FOV, type FrameGeometry } from "../src/lib/hand/projection";
-import {
-  NECK_OCCLUDER,
-  occluderExtent,
-  pendantBottom,
-  pendantTop,
-} from "../src/lib/jewellery/fit";
+import { NECK_OCCLUDER, occluderExtent } from "../src/lib/jewellery/fit";
 import { NECKLACES, dropFactorFor } from "../src/lib/jewellery/catalog";
 
 /* ------------------------------------------------------------------ */
@@ -820,16 +815,6 @@ console.log("\n— The occluder must not eat the jewellery ———————
     );
   }
 
-  const drop = DEFAULT_NECKLACE_ANCHOR.dropFactor * 2.15;
-  const bail = pendantTop(drop);
-  const tip = pendantBottom(drop, neckMmMeasured);
-  console.log(
-    `       occluder spans ${bottom.toFixed(2)} to ${top.toFixed(2)} radii; pendant spans ${bail.toFixed(2)} to ${tip.toFixed(2)}`,
-  );
-  checkTrue(
-    "the occluder's lower rim stays above the pendant's bail",
-    bottom > bail,
-  );
   checkTrue("the occluder covers the neck above the anchor", top > 1.5);
   // It still has to reach just below the anchor, or the chain's back run shows
   // across the throat where it passes the notch.
