@@ -9,13 +9,17 @@ import {
   NecklacePoseSolver,
   type NecklaceSolverOptions,
 } from "@/lib/neck/necklacePose";
-import { ANCHOR_DISTANCE, type FrameGeometry } from "@/lib/hand/projection";
+import { ANCHOR_DISTANCE, maskUvTransform, type FrameGeometry } from "@/lib/hand/projection";
 import { fixedFraming } from "@/lib/hand/framing";
 import { useTryOnStore } from "@/lib/store/tryon";
 import type { MetalId } from "@/lib/rings/types";
 import { dropFactorFor, type Necklace } from "@/lib/jewellery/catalog";
 import { Necklace3D } from "./Necklace3D";
 import { NeckOccluder } from "./NeckOccluder";
+import {
+  SegmentationOccluder,
+  type SegmentationOccluderHandle,
+} from "./SegmentationOccluder";
 import { NECK_OCCLUDER } from "@/lib/jewellery/fit";
 import { clearNeckDebug, publishNeckDebug } from "@/lib/neck/debugBus";
 
@@ -71,6 +75,7 @@ export function TrackedNecklace({
 }) {
   const groupRef = useRef<Group>(null);
   const occluderRef = useRef<Mesh>(null);
+  const maskRef = useRef<SegmentationOccluderHandle | null>(null);
   const landmarkerRef = useRef<PoseLandmarker | null>(null);
   const solver = useMemo(() => new NecklacePoseSolver(), []);
   const missCount = useRef(0);
@@ -142,9 +147,18 @@ export function TrackedNecklace({
     };
 
     let pose = null;
+    let mask: { data: Uint8Array; width: number; height: number } | null = null;
     try {
       const result = landmarker.detectForVideo(video, now);
       pose = solver.solve(result, geometry, options, now);
+
+      // The per-pixel wearer mask. Read before the result is recycled — MediaPipe
+      // reuses its output buffers between frames.
+      const raw = result.segmentationMasks?.[0];
+      if (raw && state.maskOcclusion) {
+        mask = { data: raw.getAsUint8Array(), width: raw.width, height: raw.height };
+      }
+      result.segmentationMasks?.forEach((m) => m.close());
     } catch {
       return;
     }
@@ -195,6 +209,21 @@ export function TrackedNecklace({
           neckRadiusUnits * NECK_RISE,
         );
 
+      // Hide the piece wherever something that is not the wearer covers them.
+      // Placed just in front of the necklace's nearest point, so it can occlude the
+      // piece without being occluded by it.
+      if (mask) {
+        maskRef.current?.update(
+          mask.data,
+          mask.width,
+          mask.height,
+          maskUvTransform(geometry),
+          z + neckRadiusUnits * 1.2,
+        );
+      } else {
+        maskRef.current?.hide();
+      }
+
       if (state.showDiagnostics) {
         publishNeckDebug(pose, dropFactorFor(necklace, neckRadiusMm) * unitsPerMm * neckRadiusMm, now);
       }
@@ -203,6 +232,7 @@ export function TrackedNecklace({
     } else if (++missCount.current > MISS_GRACE_FRAMES) {
       group.visible = false;
       occluder.scale.setScalar(0);
+      maskRef.current?.hide();
       clearNeckDebug();
       if (state.status === "tracking") setStatus("searching");
     }
@@ -220,6 +250,7 @@ export function TrackedNecklace({
   return (
     <>
       <NeckOccluder ref={occluderRef} />
+      <SegmentationOccluder ref={maskRef} />
       <group ref={groupRef} visible={false}>
         <Necklace3D
           metal={metal}

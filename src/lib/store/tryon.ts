@@ -77,6 +77,11 @@ type TryOnState = Persisted & {
   } | null;
   mirrored: boolean;
   flipGem: boolean;
+  /**
+   * Hide the necklace where something that is not the wearer covers them, using
+   * the pose model's per-pixel mask. Costs an extra output tensor per frame.
+   */
+  maskOcclusion: boolean;
   /** Fixed magnification of the centre of the frame, 1 being uncropped. */
   zoom: number;
   /**
@@ -123,6 +128,7 @@ type TryOnState = Persisted & {
   toggleMirrored: () => void;
   toggleFlipGem: () => void;
   setZoom: (zoom: number) => void;
+  toggleMaskOcclusion: () => void;
   toggleSettingFacesCamera: () => void;
   togglePixelProbe: () => void;
   toggleDiagnostics: () => void;
@@ -154,6 +160,7 @@ export const useTryOnStore = create<TryOnState>()(
       neckReading: null,
       mirrored: true,
       flipGem: false,
+      maskOcclusion: true,
       zoom: 1.7,
       settingFacesCamera: false,
       usePixelProbe: false,
@@ -270,6 +277,8 @@ export const useTryOnStore = create<TryOnState>()(
       toggleMirrored: () => set((s) => ({ mirrored: !s.mirrored })),
       toggleFlipGem: () => set((s) => ({ flipGem: !s.flipGem })),
       setZoom: (zoom) => set({ zoom }),
+      toggleMaskOcclusion: () =>
+        set((s) => ({ maskOcclusion: !s.maskOcclusion })),
       toggleSettingFacesCamera: () =>
         set((s) => ({ settingFacesCamera: !s.settingFacesCamera })),
       togglePixelProbe: () =>

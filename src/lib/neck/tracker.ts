@@ -33,9 +33,16 @@ async function create(): Promise<PoseLandmarker> {
       minPoseDetectionConfidence: 0.6,
       minPosePresenceConfidence: 0.6,
       minTrackingConfidence: 0.6,
-      // The segmentation mask would give pixel-accurate occlusion, but it costs
-      // a full extra output tensor per frame and is not wired up yet.
-      outputSegmentationMasks: false,
+      // Per-pixel person mask, used to hide the necklace wherever something that
+      // is not the wearer covers their neck. Geometry alone cannot do this: the
+      // scene contains stand-ins for the neck and nothing else, so a hand, a mug
+      // or a phone held in front has no representation to be occluded by, and the
+      // jewellery draws straight over it.
+      //
+      // It costs an extra output tensor per frame, which is the reason it was left
+      // off initially. On the lite model that is a 256x256 byte mask — cheap
+      // enough next to the inference itself.
+      outputSegmentationMasks: true,
     });
 
   try {

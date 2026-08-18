@@ -106,3 +106,47 @@ export function videoPixelsToPlaneUnits(pixels: number, geometry: FrameGeometry)
   const cover = Math.max(displayWidth / videoWidth, displayHeight / videoHeight);
   return (pixels * cover * (zoom > 0 ? zoom : 1)) / displayHeight;
 }
+
+/**
+ * Maps a full-view quad's UV onto the source frame's UV.
+ *
+ * The inverse of `projectToAnchorPlane`'s screen mapping, needed to sample anything
+ * that lives in *video* space — a segmentation mask — from a shader drawing in
+ * *screen* space. Both the cover fit and the digital crop have to be undone, or the
+ * mask lands offset from the picture it was computed from and the occlusion appears
+ * in the wrong place.
+ *
+ * Returned as a scale and an offset per axis so the shader is one multiply-add.
+ */
+export function maskUvTransform(geometry: FrameGeometry): {
+  scaleX: number;
+  offsetX: number;
+  scaleY: number;
+  offsetY: number;
+} {
+  const { videoWidth, videoHeight, displayWidth, displayHeight, mirrored, zoom } = geometry;
+  const z = zoom > 0 ? zoom : 1;
+
+  const cover = Math.max(displayWidth / videoWidth, displayHeight / videoHeight);
+  const renderedWidth = videoWidth * cover;
+  const renderedHeight = videoHeight * cover;
+
+  // Forward: px = dw/2 + (su - sc) * rw * z, with su mirrored if the preview is.
+  // Inverting for su, in terms of a UV that runs 0..1 across the display:
+  const kx = displayWidth / (renderedWidth * z);
+  const sc = mirrored ? 1 - geometry.centerU : geometry.centerU;
+  let scaleX = kx;
+  let offsetX = sc - kx / 2;
+  // Undo the mirror last, so it composes with the crop rather than fighting it.
+  if (mirrored) {
+    scaleX = -scaleX;
+    offsetX = 1 - offsetX;
+  }
+
+  // The quad's V runs bottom-to-top while the frame's runs top-to-bottom.
+  const ky = displayHeight / (renderedHeight * z);
+  const scaleY = -ky;
+  const offsetY = ky / 2 + geometry.centerV;
+
+  return { scaleX, offsetX, scaleY, offsetY };
+}

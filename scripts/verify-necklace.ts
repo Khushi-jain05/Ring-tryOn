@@ -16,7 +16,13 @@ import {
 } from "../src/lib/neck/necklacePose";
 import { PL, POSE_LANDMARK_COUNT } from "../src/lib/neck/landmarks";
 import { DEFAULT_ONE_EURO } from "../src/lib/hand/oneEuro";
-import { ANCHOR_DISTANCE, CAMERA_FOV, type FrameGeometry } from "../src/lib/hand/projection";
+import {
+  ANCHOR_DISTANCE,
+  CAMERA_FOV,
+  maskUvTransform,
+  projectToAnchorPlane,
+  type FrameGeometry,
+} from "../src/lib/hand/projection";
 import { NECK_OCCLUDER, occluderExtent } from "../src/lib/jewellery/fit";
 import { NECKLACES, dropFactorFor } from "../src/lib/jewellery/catalog";
 
@@ -342,6 +348,53 @@ for (const distance of [0.55, 1.2]) {
     f / 2 / distance,
     (f / 2 / distance) * 0.05,
   );
+}
+
+console.log("\n— Mask sampling follows the preview's crop ————————");
+
+/**
+ * The per-pixel wearer mask is computed in *video* space and consumed by a shader
+ * drawing in *screen* space, so it has to be sampled through the same cover fit,
+ * crop and mirror the preview applies. Get that wrong and the occlusion lands
+ * somewhere other than the obstruction it is meant to hide — which is worse than no
+ * occlusion, because the piece then disappears over the wearer instead.
+ *
+ * Checked by round-tripping: project a landmark to the screen, convert that screen
+ * position to the quad's UV, run the mask transform, and confirm it arrives back at
+ * the landmark's own position in the frame.
+ */
+{
+  const cases: { label: string; geo: FrameGeometry }[] = [
+    { label: "unmirrored, 1x", geo: { ...geometry, mirrored: false, zoom: 1 } },
+    { label: "mirrored, 1x", geo: { ...geometry, mirrored: true, zoom: 1 } },
+    { label: "mirrored, 1.9x", geo: { ...geometry, mirrored: true, zoom: 1.9 } },
+    {
+      label: "wide video into a tall stage",
+      geo: { ...geometry, videoWidth: 1280, videoHeight: 720, mirrored: true, zoom: 1.4 },
+    },
+  ];
+
+  for (const { label, geo } of cases) {
+    const uv = maskUvTransform(geo);
+    let worst = 0;
+
+    for (const index of [PL.LEFT_SHOULDER, PL.RIGHT_SHOULDER, PL.NOSE, PL.LEFT_EAR]) {
+      const lm = image[index];
+      // Where the preview puts this landmark, in anchor-plane units...
+      const plane = projectToAnchorPlane(lm.x, lm.y, geo, { x: 0, y: 0 });
+      // ...converted to the quad's UV, which runs 0..1 across the display with V up.
+      const quadU = plane.x / (geo.displayWidth / geo.displayHeight) + 0.5;
+      const quadV = plane.y + 0.5;
+      // ...and back to the frame through the mask transform.
+      const backU = quadU * uv.scaleX + uv.offsetX;
+      const backV = quadV * uv.scaleY + uv.offsetY;
+
+      worst = Math.max(worst, Math.abs(backU - lm.x), Math.abs(backV - lm.y));
+    }
+
+    console.log(`       ${label}: worst round-trip error ${worst.toExponential(1)}`);
+    checkTrue(`mask UV round-trips under ${label}`, worst < 1e-9);
+  }
 }
 
 console.log("\n— Turning the head only ——————————————————————————");

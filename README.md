@@ -138,8 +138,14 @@ scripts/               verification suites and asset setup
 
 ## Known limitations
 
-- Occlusion is geometric, not per-pixel. Commercial try-ons use a hand
-  segmentation mask, which is exact at every angle; capsules approximate it.
+- **Rings** are occluded geometrically, not per-pixel — stand-ins for the hand,
+  which means anything else that comes between the camera and your hand has no
+  representation in the scene and the ring draws over it. The hand model produces no
+  segmentation mask, so fixing this needs a second model.
+- **Necklaces** do use a per-pixel mask, so a foreign object held in front hides the
+  piece. It separates you from everything else, though, not one part of you from
+  another — your own hand still counts as you, so raising it to your throat will not
+  hide the necklace.
 - One hand at a time.
 - MediaPipe's relative depth is its noisiest output, so neighbouring-finger
   occlusion is biased slightly backwards — the failure mode is showing a little

@@ -352,6 +352,14 @@ export function TryOnStudio() {
                   format={(v) => (v < 1.2 ? "Very steady" : v > 2.8 ? "Very quick" : "Balanced")}
                   onChange={(v) => store.setSmoothing({ minCutoff: v })}
                 />
+                {isNecklace && (
+                  <Toggle
+                    label="Hide behind objects in front"
+                    hint="Uses a per-pixel outline of you, so a hand or a cup held up covers the necklace. Your own hand still counts as you, so it will not hide it."
+                    checked={store.maskOcclusion}
+                    onChange={store.toggleMaskOcclusion}
+                  />
+                )}
                 <Toggle
                   label="Mirror preview"
                   hint="Turn off if you're using a rear camera"
