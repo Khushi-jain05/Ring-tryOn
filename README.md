@@ -106,6 +106,36 @@ Two ways to fix it, both in the studio's sizing panel:
 The panel labels the reading **Estimate** or **Exact** so it is always clear which
 you are looking at.
 
+## Adding an imported ring
+
+A GLB drops into the same placement path as the generated rings, provided it is
+normalised to the convention they use:
+
+```
+bore radius 1  ·  +Z along the finger  ·  +Y toward the back of the hand
+origin at the centre of the bore
+```
+
+Everything downstream — the pose solver, the finger occluder, the contact shadow, the
+depth compensation — is expressed in multiples of the band's inner radius, so a model
+in those terms needs no special handling anywhere.
+
+```bash
+npx tsx scripts/fit-glb-ring.mjs public/models/ring.glb
+```
+
+That prints the scale to paste into the ring's `glb` block. It finds the bore as the
+largest **enclosed** empty circle across every vertex, which is worth knowing because
+two more obvious methods both pick the wrong axis on a real ring: the smallest
+bounding-box extent is not the band's width once a head spreads along the finger, and
+the inertia tensor's largest principal moment identifies the hole axis only for a thin
+loop — with a substantial head, all three moments land within 20% of each other.
+
+The `design` block still has to be filled in for an imported ring, because the
+occluder and the contact shadow are sized from it. Use the **shank's** dimensions, not
+the model's overall extent: `npm run verify` compares the declared numbers against the
+mesh and fails if they disagree.
+
 ## Testing
 
 `npm run verify` runs two suites against synthetic data, so neither needs a

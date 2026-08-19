@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { DoubleSide, type BufferGeometry } from "three";
 import { GEMS, METALS } from "@/lib/rings/catalog";
+import { GlbRing3D } from "./GlbRing3D";
 import {
   createBandGeometry,
   createGemGeometry,
@@ -210,6 +211,9 @@ function FloralRing({ ring, metal, quality }: Required<Ring3DProps>) {
  * along the local +Z axis with the setting standing off local +Y.
  */
 export function Ring3D({ ring, metal, quality = "showcase" }: Ring3DProps) {
+  // An imported mesh is already a finished ring; there is nothing to assemble.
+  if (ring.glb) return <GlbRing3D source={ring.glb} />;
+
   const isFloral = ring.design.setting === "floral";
   if (isFloral) return <FloralRing ring={ring} metal={metal} quality={quality} />;
   return <StandardRing ring={ring} metal={metal} quality={quality} />;

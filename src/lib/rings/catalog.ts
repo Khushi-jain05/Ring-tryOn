@@ -108,6 +108,43 @@ export const METAL_ORDER: MetalId[] = [
 
 export const RINGS: Ring[] = [
   {
+    id: "solitaire-glb",
+    name: "Vermilion Halo",
+    collection: "Signature",
+    description:
+      "An imported model rather than a generated one: a red centre stone in a pavé-set halo on a polished silver band. Its own finish is kept as designed, so the metal options do not apply to it.",
+    // The model's materials are baked, so offering a choice the picker cannot honour
+    // would be a lie. One entry, naming what it actually is.
+    metals: ["white-gold"],
+    gem: "ruby",
+    design: {
+      // Not defaults. The occluder and the contact shadow are sized from these, so
+      // they must describe the *imported* geometry, measured off the model itself.
+      //
+      // The shank is a round wire: 0.222 bore radii thick and the same across, which
+      // is a 1.8 mm wire on an 8.25 mm finger. `bandWidth` is emphatically not the
+      // model's full extent along the finger — that is 1.4 radii, but only at the
+      // head, and using it would have made the contact shadow five times too wide.
+      bandInnerScale: 1,
+      bandThickness: 0.222,
+      bandWidth: 0.222,
+      profile: "comfort",
+      setting: "halo",
+      gemCut: "round",
+      gemSize: 0.48,
+      accentCount: 0,
+    },
+    glb: {
+      url: "/models/ring.glb",
+      // Bore radius measured at 0.03260 in the file's own units.
+      scale: 30.6709,
+      envMapIntensity: 1.6,
+    },
+    tags: ["Imported", "Halo"],
+    carat: 0.9,
+  },
+
+  {
     id: "camellia-bloom",
     name: "Camellia Bloom",
     collection: "Floral",

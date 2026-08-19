@@ -30,6 +30,14 @@ function pass(message: string) {
   console.log(`PASS  ${message}`);
 }
 
+function check(label: string, actual: number, expected: number, tolerance: number) {
+  const ok = Math.abs(actual - expected) <= tolerance;
+  if (!ok) failures++;
+  console.log(
+    `${ok ? "PASS" : "FAIL"}  ${label.padEnd(52)} got ${actual.toFixed(3)}  want ${expected.toFixed(3)} ±${tolerance}`,
+  );
+}
+
 function checkTrue(label: string, value: boolean) {
   if (!value) failures++;
   console.log(`${value ? "PASS" : "FAIL"}  ${label}`);
@@ -116,6 +124,9 @@ console.log("— Band cross-sections ——————————————�
 for (const ring of RINGS) {
   // The floral rings carry their own builder; the shank is checked with it below.
   if (ring.design.setting === "floral") continue;
+  // Imported rings render their own mesh, so a generated band for them is never
+  // drawn and there is nothing here worth asserting about it.
+  if (ring.glb) continue;
 
   const { profile } = ring.design;
   const geometry = createBandGeometry(ring.design);
@@ -281,7 +292,115 @@ console.log("\n— American diamond collar ————————————�
   checkTrue("a collar still clears the neck's anchor", drop > 0.3);
 }
 
-console.log(
-  failures === 0 ? "\nAll geometry checks passed.\n" : `\n${failures} check(s) failed.\n`,
-);
-process.exit(failures === 0 ? 0 : 1);
+// Wrapped rather than awaited at the top level: tsx transforms these scripts to CJS,
+// where top-level await is not available.
+void (async () => {
+  await checkImportedRings();
+
+  console.log(
+    failures === 0 ? "\nAll geometry checks passed.\n" : `\n${failures} check(s) failed.\n`,
+  );
+  process.exit(failures === 0 ? 0 : 1);
+})();
+
+
+/**
+ * Checks each imported ring against the numbers the catalogue claims about it.
+ *
+ * The catalogue's `design` block is not decoration for an imported mesh — the finger
+ * occluder and the contact shadow are sized from it, so if it disagrees with the
+ * actual geometry the ring is placed against a band that is not there. That is easy
+ * to get wrong in a way nothing else catches: the first attempt here recorded the
+ * model's full extent along the finger, 1.4 bore radii, as its band width. But that
+ * extent belongs to the head, which occupies about 30 degrees of the circumference;
+ * the shank is a 0.22-radius wire. The contact shadow would have been five times too
+ * wide, on a ring that otherwise rendered perfectly.
+ */
+async function checkImportedRings() {
+  const imported = RINGS.filter((r) => r.glb);
+  if (imported.length === 0) return;
+
+  console.log("\n— Imported rings match their declared dimensions ——");
+
+  const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js");
+  const { readFile } = await import("node:fs/promises");
+
+  for (const ring of imported) {
+    const source = ring.glb!;
+    const bytes = await readFile(`public${source.url}`).catch(() => null);
+    if (!bytes) {
+      fail(`${ring.name}: public${source.url} is missing`);
+      continue;
+    }
+
+    const gltf = await new Promise<{ scene: import("three").Object3D }>((resolve, reject) => {
+      new GLTFLoader().parse(
+        bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+        "",
+        (g) => resolve(g as never),
+        reject,
+      );
+    });
+
+    gltf.scene.updateMatrixWorld(true);
+
+    // Every vertex, in the normalised frame the renderer will draw it in.
+    const pts: Vector3[] = [];
+    const v = new Vector3();
+    gltf.scene.traverse((object) => {
+      const mesh = object as import("three").Mesh;
+      if (!mesh.isMesh) return;
+      const pos = mesh.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld).multiplyScalar(source.scale);
+        pts.push(v.clone());
+      }
+    });
+
+    // Bore: the closest any geometry comes to the finger axis.
+    let bore = Infinity;
+    let outer = 0;
+    for (const p of pts) {
+      const r = Math.hypot(p.x, p.y);
+      if (r < bore) bore = r;
+      if (r > outer) outer = r;
+    }
+    console.log(`       ${ring.name}: bore ${bore.toFixed(3)}, outer ${outer.toFixed(3)}`);
+    check(`${ring.name}: scaled to bore radius 1`, bore, 1, 0.02);
+
+    // The shank, sampled away from the head. The head is found first rather than
+    // assumed to be at any particular angle.
+    let headAngle = 0;
+    let headOuter = 0;
+    for (const p of pts) {
+      const r = Math.hypot(p.x, p.y);
+      if (r > headOuter) { headOuter = r; headAngle = Math.atan2(p.y, p.x); }
+    }
+    const cos = Math.cos(headAngle);
+    const sin = Math.sin(headAngle);
+
+    let zMin = Infinity;
+    let zMax = -Infinity;
+    let shankOuter = 0;
+    for (const p of pts) {
+      const r = Math.hypot(p.x, p.y);
+      if (r < 0.9) continue;
+      // Only the far side of the band from the head.
+      if ((p.x * cos + p.y * sin) / r > -0.5) continue;
+      if (p.z < zMin) zMin = p.z;
+      if (p.z > zMax) zMax = p.z;
+      if (r > shankOuter) shankOuter = r;
+    }
+    const shankWidth = zMax - zMin;
+    const shankThickness = shankOuter - 1;
+    console.log(
+      `       ${ring.name}: shank ${shankThickness.toFixed(3)} thick x ${shankWidth.toFixed(3)} wide (declared ${ring.design.bandThickness} x ${ring.design.bandWidth})`,
+    );
+    check(`${ring.name}: declared band thickness matches the mesh`, ring.design.bandThickness, shankThickness, 0.04);
+    check(`${ring.name}: declared band width matches the mesh`, ring.design.bandWidth, shankWidth, 0.06);
+
+    // The setting must be on +Y, which is where the placement code puts the back of
+    // the hand. A model built the other way up would wear its stone into the palm.
+    checkTrue(`${ring.name}: the setting sits on +Y`, Math.sin(headAngle) > 0.8);
+  }
+}

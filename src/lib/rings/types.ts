@@ -72,6 +72,29 @@ export type RingDesign = {
   floral?: FloralSpec;
 };
 
+/**
+ * A ring supplied as a GLB rather than generated.
+ *
+ * The transform is measured once, offline, by `scripts/fit-glb-ring.mjs` and stored
+ * here — not derived at runtime. Finding a bore means searching for the largest
+ * enclosed empty circle over every vertex, which is far too slow for a frame loop and
+ * gives the same answer every time, so it belongs in the build rather than the render.
+ */
+export type GlbSource = {
+  url: string;
+  /**
+   * Uniform scale that brings the model's bore radius to exactly 1, which is the
+   * unit everything downstream is expressed in.
+   */
+  scale: number;
+  /** Applied after scaling, to bring the bore's centre to the origin. */
+  offset?: [number, number, number];
+  /** Applied to put the finger axis on +Z and the setting on +Y. */
+  rotation?: [number, number, number];
+  /** Lifts an imported material into this scene's lighting. */
+  envMapIntensity?: number;
+};
+
 export type Ring = {
   id: string;
   name: string;
@@ -80,6 +103,12 @@ export type Ring = {
   metals: MetalId[];
   gem: GemId;
   design: RingDesign;
+  /**
+   * Present when the ring is an imported mesh. `design` is still required — the band
+   * dimensions in it are what the occluder and the contact shadow are sized from, so
+   * they must describe the imported model rather than being left at defaults.
+   */
+  glb?: GlbSource;
   tags: string[];
   /** Carat weight of the centre stone, for the spec sheet. */
   carat?: number;
