@@ -33,6 +33,8 @@ export type RenderQuality = "showcase" | "live";
 type Ring3DProps = {
   ring: Ring;
   metal: MetalId;
+  /** Overrides the stone the ring was designed around. */
+  gem?: GemId;
   quality?: RenderQuality;
 };
 
@@ -173,7 +175,7 @@ function Placed({
   );
 }
 
-function FloralRing({ ring, metal, quality }: Required<Ring3DProps>) {
+function FloralRing({ ring, metal, gem, quality }: Required<Ring3DProps>) {
   const { design } = ring;
   const g = useMemo(() => {
     const spec = design.floral ?? DEFAULT_FLORAL;
@@ -197,7 +199,7 @@ function FloralRing({ ring, metal, quality }: Required<Ring3DProps>) {
         <MetalSurface metal={metal} finish="matte" />
       </mesh>
       <mesh geometry={g.stone} position={g.gem.position} scale={g.gem.radius}>
-        <GemSurface gem={ring.gem} quality={quality} />
+        <GemSurface gem={gem} quality={quality} />
       </mesh>
       <Placed placements={g.prongs} geometry={g.prong}>
         <MetalSurface metal={metal} />
@@ -210,16 +212,24 @@ function FloralRing({ ring, metal, quality }: Required<Ring3DProps>) {
  * A complete ring, authored so that a finger of radius 1 passes through it
  * along the local +Z axis with the setting standing off local +Y.
  */
-export function Ring3D({ ring, metal, quality = "showcase" }: Ring3DProps) {
-  // An imported mesh is already a finished ring; there is nothing to assemble.
-  if (ring.glb) return <GlbRing3D source={ring.glb} />;
+export function Ring3D({ ring, metal, gem, quality = "showcase" }: Ring3DProps) {
+  // A ring names the stone it was designed around; `gem` overrides that when the
+  // wearer picks a different one.
+  const stone = gem ?? ring.gem;
+
+  // An imported mesh is already a finished ring, so nothing is assembled — but its
+  // materials are still driven from the same palettes, or the metal and stone
+  // pickers would do nothing for it.
+  if (ring.glb) {
+    return <GlbRing3D source={ring.glb} metal={metal} gem={stone} quality={quality} />;
+  }
 
   const isFloral = ring.design.setting === "floral";
-  if (isFloral) return <FloralRing ring={ring} metal={metal} quality={quality} />;
-  return <StandardRing ring={ring} metal={metal} quality={quality} />;
+  if (isFloral) return <FloralRing ring={ring} metal={metal} gem={stone} quality={quality} />;
+  return <StandardRing ring={ring} metal={metal} gem={stone} quality={quality} />;
 }
 
-function StandardRing({ ring, metal, quality }: Required<Ring3DProps>) {
+function StandardRing({ ring, metal, gem, quality }: Required<Ring3DProps>) {
   const g = useRingGeometries(ring);
   const { design } = ring;
   const gemY =
@@ -239,7 +249,7 @@ function StandardRing({ ring, metal, quality }: Required<Ring3DProps>) {
 
       {g.gem && (
         <mesh geometry={g.gem} position={[0, gemY, 0]} scale={design.gemSize}>
-          <GemSurface gem={ring.gem} quality={quality} />
+          <GemSurface gem={gem} quality={quality} />
         </mesh>
       )}
 

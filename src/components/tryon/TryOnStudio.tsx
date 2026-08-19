@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { FINGER_LABELS, type FingerName } from "@/lib/hand/landmarks";
 import { GEMS, METALS, RINGS, getRing } from "@/lib/rings/catalog";
+import type { GemId } from "@/lib/rings/types";
 import { MAX_ZOOM, MIN_ZOOM } from "@/lib/hand/framing";
 import { NECKLACES, getNecklace } from "@/lib/jewellery/catalog";
 import { useTryOnStore } from "@/lib/store/tryon";
@@ -14,6 +15,17 @@ import { SizePanel } from "./SizePanel";
 import { Field, Segmented, Slider, Toggle } from "./controls";
 
 const FINGERS: FingerName[] = ["index", "middle", "ring", "pinky"];
+
+/** Stones offered as alternatives to whatever a ring was designed around. */
+const STONE_CHOICES: GemId[] = [
+  "diamond",
+  "ruby",
+  "sapphire",
+  "emerald",
+  "amethyst",
+  "aquamarine",
+  "onyx",
+];
 
 export function TryOnStudio() {
   const params = useSearchParams();
@@ -270,7 +282,40 @@ export function TryOnStudio() {
             </div>
           ) : (
             <>
-              <Field label="Finger">
+              {!isNecklace && (
+            <Field label="Centre stone">
+              <div className="flex flex-wrap gap-2">
+                {/*
+                  The ring's own stone comes first and is labelled as the design's,
+                  so choosing a different one is visibly a departure rather than the
+                  default. Picking it again clears the override, which is why the
+                  store holds null rather than a concrete stone.
+                */}
+                {([null, ...STONE_CHOICES.filter((g) => g !== ring.gem)] as (GemId | null)[]).map(
+                  (id) => {
+                    const gem = GEMS[id ?? ring.gem];
+                    const active = id === null ? store.gem === null : store.gem === id;
+                    return (
+                      <button
+                        key={id ?? "as-designed"}
+                        type="button"
+                        onClick={() => store.setGem(id)}
+                        aria-label={id === null ? `${gem.label} (as designed)` : gem.label}
+                        aria-pressed={active}
+                        title={id === null ? `${gem.label} — as designed` : gem.label}
+                        className={`size-7 rounded-full ring-offset-2 ring-offset-background transition ${
+                          active ? "ring-2 ring-accent" : "ring-1 ring-line hover:ring-muted"
+                        }`}
+                        style={{ background: gem.color }}
+                      />
+                    );
+                  },
+                )}
+              </div>
+            </Field>
+          )}
+
+          <Field label="Finger">
                 <Segmented
                   options={FINGERS.map((f) => ({ value: f, label: FINGER_LABELS[f] }))}
                   value={store.anchor.finger}

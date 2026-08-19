@@ -4,7 +4,7 @@ import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { ContactShadows } from "@react-three/drei";
 import type { Group } from "three";
-import type { MetalId, Ring } from "@/lib/rings/types";
+import type { GemId, MetalId, Ring } from "@/lib/rings/types";
 import { Ring3D, type RenderQuality } from "./Ring3D";
 import { StudioEnvironment } from "./StudioEnvironment";
 
@@ -18,12 +18,14 @@ export const PRESENTATION_ROTATION: [number, number, number] = [0.34, -0.62, 0.1
 export function RingStage({
   ring,
   metal,
+  gem,
   quality = "showcase",
   autoRotate = false,
   shadows = true,
 }: {
   ring: Ring;
   metal: MetalId;
+  gem?: GemId;
   quality?: RenderQuality;
   autoRotate?: boolean;
   shadows?: boolean;
@@ -44,7 +46,7 @@ export function RingStage({
 
       <group rotation={PRESENTATION_ROTATION}>
         <group ref={groupRef}>
-          <Ring3D ring={ring} metal={metal} quality={quality} />
+          <Ring3D ring={ring} metal={metal} gem={gem} quality={quality} />
         </group>
       </group>
 

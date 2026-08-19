@@ -11,7 +11,7 @@ import {
 } from "@/lib/neck/necklacePose";
 import { RINGS } from "@/lib/rings/catalog";
 import { DEFAULT_SIZE, sizeToDiameterMm, snapToStockSize } from "@/lib/rings/sizes";
-import type { MetalId } from "@/lib/rings/types";
+import type { GemId, MetalId } from "@/lib/rings/types";
 
 export type TrackingStatus =
   | "idle"
@@ -49,6 +49,14 @@ type TryOnState = Persisted & {
   ringId: string;
   necklaceId: string;
   metal: MetalId;
+  /**
+   * Stone the wearer picked, or null to use whichever the ring was designed around.
+   *
+   * Null rather than a concrete default so that switching rings shows each one as
+   * designed, instead of carrying the last ring's stone across to a piece it was
+   * never meant for.
+   */
+  gem: GemId | null;
   finger: FingerName;
 
   /** US size the ring is drawn at when auto-fit is off. */
@@ -108,6 +116,7 @@ type TryOnState = Persisted & {
 
   setRing: (ringId: string) => void;
   setMetal: (metal: MetalId) => void;
+  setGem: (gem: GemId | null) => void;
   setFinger: (finger: FingerName) => void;
   setRingSize: (size: number) => void;
   setAutoFit: (autoFit: boolean) => void;
@@ -144,6 +153,7 @@ export const useTryOnStore = create<TryOnState>()(
       ringId: RINGS[0].id,
       necklaceId: "infinity-heart",
       metal: RINGS[0].metals[0],
+      gem: null,
       finger: "ring",
 
       ringSize: DEFAULT_SIZE,
@@ -180,6 +190,7 @@ export const useTryOnStore = create<TryOnState>()(
           return { ringId, metal };
         }),
       setMetal: (metal) => set({ metal }),
+      setGem: (gem) => set({ gem }),
       setFinger: (finger) =>
         // A different finger is a different measurement, and a different anchor:
         // a ring rides higher on a pinky than on an index finger.

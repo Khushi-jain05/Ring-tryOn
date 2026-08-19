@@ -93,6 +93,16 @@ export type GlbSource = {
   rotation?: [number, number, number];
   /** Lifts an imported material into this scene's lighting. */
   envMapIntensity?: number;
+  /**
+   * What each of the model's own materials *is*, by its name in the file.
+   *
+   * A GLB has its finish baked in, so without this the metal and stone pickers do
+   * nothing for an imported ring while working on every other one — which reads as
+   * the controls being broken. Naming roles lets the same palettes drive it. A
+   * material left out of this map keeps its original appearance rather than being
+   * guessed at.
+   */
+  materials?: Record<string, "metal" | "centre" | "accent">;
 };
 
 export type Ring = {

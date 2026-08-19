@@ -50,6 +50,7 @@ export function TrackedRing({ video, ring }: TrackedRingProps) {
 
   const { size } = useThree();
   const metal = useTryOnStore((s) => s.metal);
+  const gem = useTryOnStore((s) => s.gem);
   const setStatus = useTryOnStore((s) => s.setStatus);
   const setFps = useTryOnStore((s) => s.setFps);
   const setReading = useTryOnStore((s) => s.setReading);
@@ -298,7 +299,7 @@ export function TrackedRing({ video, ring }: TrackedRingProps) {
       <group ref={groupRef} visible={false}>
         <FingerOccluder ref={occluderRef} />
         <ContactShadow ref={shadowRef} bandWidth={ring.design.bandWidth} />
-        <Ring3D ring={ring} metal={metal} quality="live" />
+        <Ring3D ring={ring} metal={metal} gem={gem ?? undefined} quality="live" />
       </group>
     </>
   );

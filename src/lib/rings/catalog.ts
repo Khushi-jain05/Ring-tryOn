@@ -112,10 +112,8 @@ export const RINGS: Ring[] = [
     name: "Vermilion Halo",
     collection: "Signature",
     description:
-      "An imported model rather than a generated one: a red centre stone in a pavé-set halo on a polished silver band. Its own finish is kept as designed, so the metal options do not apply to it.",
-    // The model's materials are baked, so offering a choice the picker cannot honour
-    // would be a lie. One entry, naming what it actually is.
-    metals: ["white-gold"],
+      "An imported model rather than a generated one: a cushion centre stone in a pavé halo. The mesh is the design and the finish is the option — its metal and its centre stone are both driven from the same palettes as the generated rings, so every metal and every stone applies.",
+    metals: ["white-gold", "yellow-gold", "rose-gold", "platinum"],
     gem: "ruby",
     design: {
       // Not defaults. The occluder and the contact shadow are sized from these, so
@@ -139,6 +137,13 @@ export const RINGS: Ring[] = [
       // Bore radius measured at 0.03260 in the file's own units.
       scale: 30.6709,
       envMapIntensity: 1.6,
+      // The model ships three materials; these are their names inside the file.
+      // "Dimond" is the author's spelling, and has to be matched exactly.
+      materials: {
+        "Silver Metal": "metal",
+        "Red Dimond": "centre",
+        "Small Dimond": "accent",
+      },
     },
     tags: ["Imported", "Halo"],
     carat: 0.9,
