@@ -155,10 +155,30 @@ function bandProfile(design: RingDesign): Vector2[] {
   }
 }
 
+/** How far each strand winds in and out radially, as a fraction of its own radius. */
+const TWIST_WOBBLE = 0.35;
+
 /** Two shanks wound around each other, used by the Helix design. */
 function twistedBand(design: RingDesign): BufferGeometry {
-  const inner = design.bandInnerScale + design.bandThickness / 2;
   const tube = design.bandThickness / 2;
+  /**
+   * Centreline radius of a strand at the *inward* end of its wind.
+   *
+   * The wobble has to be accounted for here or it eats into the bore. Placing the
+   * centreline at `bandInnerScale + tube` puts a *non-wobbling* tube's inner surface
+   * exactly on the bore — but each strand then winds a further `TWIST_WOBBLE * tube`
+   * inward of that, and this ring's bore came out at 0.967 instead of 1.0.
+   *
+   * Every other ring in the catalogue presents a bore of exactly 1.0, and all of the
+   * placement is expressed in multiples of it — so this one alone was being fitted
+   * 3% tighter than the rest, biting into the finger. Nothing looks wrong about the
+   * ring on its own; the fault is only visible by comparison, which is why the
+   * catalogue-wide bore check exists.
+   *
+   * A real twisted band's bore *is* the innermost point of the winding, so lifting
+   * the base radius by the wobble is also the physically correct construction.
+   */
+  const inner = design.bandInnerScale + tube + tube * TWIST_WOBBLE;
   const amplitude = design.bandWidth / 2.4;
   const turns = 5;
 
@@ -170,8 +190,8 @@ function twistedBand(design: RingDesign): BufferGeometry {
       const wobble = Math.sin(t * turns + phase);
       points.push(
         new Vector3(
-          Math.cos(t) * (inner + wobble * tube * 0.35),
-          Math.sin(t) * (inner + wobble * tube * 0.35),
+          Math.cos(t) * (inner + wobble * tube * TWIST_WOBBLE),
+          Math.sin(t) * (inner + wobble * tube * TWIST_WOBBLE),
           Math.cos(t * turns + phase) * amplitude,
         ),
       );

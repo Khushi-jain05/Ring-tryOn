@@ -150,6 +150,50 @@ for (const ring of RINGS) {
   }
 }
 
+console.log("\n— Every ring presents the same bore ———————————————");
+
+/**
+ * The bore is the one thing every ring must agree on.
+ *
+ * All of the placement — the seat, the occluder, the contact shadow, the depth
+ * compensation — is expressed in multiples of the band's inner radius, and the group
+ * is scaled by the *measured finger*. So a ring whose geometry puts its bore at
+ * anything other than 1.0 is silently placed to a different fit than the rest: at
+ * 0.97 it sits 3% tighter, biting into the finger, and at 1.03 it floats. Nothing
+ * else in this file would notice, because each ring looks perfectly well made on its
+ * own — the fault is only visible by comparison.
+ *
+ * This is also what makes "an imported ring is placed exactly like a generated one"
+ * a checkable statement rather than a claim: both sides are held to the same number.
+ */
+for (const ring of RINGS) {
+  if (ring.glb) continue; // imported rings are measured against their mesh below
+
+  const geometry = createBandGeometry(ring.design);
+  const pos = geometry.attributes.position;
+  const v = new Vector3();
+
+  let bore = Infinity;
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    bore = Math.min(bore, Math.hypot(v.x, v.y));
+  }
+
+  // Centre of the bore's own wall, not of the whole band — a head pulls the band's
+  // centroid off-axis while the bore stays where it belongs.
+  let cx = 0;
+  let cy = 0;
+  let n = 0;
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    if (Math.hypot(v.x, v.y) < bore * 1.06) { cx += v.x; cy += v.y; n++; }
+  }
+  const offset = n > 0 ? Math.hypot(cx / n, cy / n) : 0;
+
+  check(`${ring.name}: bore radius`, bore, 1, 0.01);
+  check(`${ring.name}: bore centred`, offset, 0, 0.02);
+}
+
 console.log("\n— Band dimensions are physically plausible ————————");
 
 for (const ring of RINGS) {
