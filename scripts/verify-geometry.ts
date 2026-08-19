@@ -368,6 +368,33 @@ async function checkImportedRings() {
     console.log(`       ${ring.name}: bore ${bore.toFixed(3)}, outer ${outer.toFixed(3)}`);
     check(`${ring.name}: scaled to bore radius 1`, bore, 1, 0.02);
 
+    // The bore has to be *centred*, not merely the right size — and that was
+    // untested. An offset bore of the correct radius passes every other check here
+    // while sitting the whole ring off to one side of the finger, which is the
+    // hardest kind of placement fault to attribute because the ring looks perfectly
+    // well made.
+    const wall = pts.filter((p) => Math.hypot(p.x, p.y) < bore * 1.06);
+    const centre = new Vector3();
+    for (const p of wall) centre.add(p);
+    centre.divideScalar(Math.max(1, wall.length));
+    console.log(
+      `       ${ring.name}: bore centre (${centre.x.toFixed(3)}, ${centre.y.toFixed(3)}, ${centre.z.toFixed(3)}) from ${wall.length} wall vertices`,
+    );
+    check(`${ring.name}: bore is centred across the finger`, Math.hypot(centre.x, centre.y), 0, 0.05);
+    check(`${ring.name}: bore is centred along the finger`, centre.z, 0, 0.05);
+
+    // And round. A bore that is oval by more than the band presses into skin would
+    // leave the ring gapped on two sides and biting on the other two.
+    let rMin = Infinity;
+    let rMax = 0;
+    for (const p of wall) {
+      const r = Math.hypot(p.x, p.y);
+      if (r < rMin) rMin = r;
+      if (r > rMax) rMax = r;
+    }
+    console.log(`       ${ring.name}: bore roundness ${rMin.toFixed(3)} .. ${rMax.toFixed(3)}`);
+    checkTrue(`${ring.name}: bore is round`, rMax - rMin < 0.08);
+
     // The shank, sampled away from the head. The head is found first rather than
     // assumed to be at any particular angle.
     let headAngle = 0;
