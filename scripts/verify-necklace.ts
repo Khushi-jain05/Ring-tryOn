@@ -878,6 +878,57 @@ console.log("\n— The occluder must not eat the jewellery ———————
   checkTrue("the occluder sits inside the chain's path", NECK_OCCLUDER.press < 1);
 }
 
+console.log("\n— A shoulder hidden by a turn ——————————————————————");
+
+/**
+ * Turning to profile must not make the necklace disappear.
+ *
+ * Turn far enough and the away shoulder goes behind the torso, so the model reports it
+ * with low visibility — inferred from the rest of the body rather than seen. The gate
+ * used to require 0.5 on both shoulders and refused the solve, which hid the piece at
+ * exactly the angle someone turns to in order to look at a necklace from the side.
+ *
+ * The inferred position is good enough, because everything it feeds is either latched
+ * already (the neck's measurements) or heavily smoothed (the anchor). What matters is
+ * that the piece stays put and stays the right size, which is what this asserts.
+ */
+{
+  const square = settle(makeBody());
+
+  for (const visibility of [0.45, 0.3, 0.18]) {
+    const world = makeBody().map((p, i) =>
+      i === PL.LEFT_SHOULDER ? { ...p, visibility } : p,
+    );
+    const turned = settle(world);
+
+    if (!turned) {
+      failures++;
+      console.log(`FAIL  no pose with a shoulder at visibility ${visibility}`);
+      continue;
+    }
+
+    const drift = Math.hypot(
+      turned.position.x - square!.position.x,
+      turned.position.y - square!.position.y,
+    );
+    console.log(
+      `       shoulder at ${visibility}: placed, confidence ${turned.confidence.toFixed(2)}, drift ${drift.toExponential(1)}`,
+    );
+    checkTrue(`a shoulder at visibility ${visibility} still places the piece`, true);
+    checkTrue(
+      `visibility ${visibility} is reported rather than hidden`,
+      turned.confidence <= visibility + 1e-6,
+    );
+    checkTrue(`the piece does not move when a shoulder is inferred`, drift < square!.neckRadius * 0.05);
+  }
+
+  // Below the floor there is genuinely no opinion, and refusing is right.
+  const absent = settle(
+    makeBody().map((p, i) => (i === PL.LEFT_SHOULDER ? { ...p, visibility: 0.05 } : p)),
+  );
+  checkTrue("a shoulder the model cannot see at all is still refused", absent === null);
+}
+
 console.log("\n— Missing shoulders ——————————————————————————————");
 
 // A necklace hangs off the shoulder girdle. Cropped at the chin there is nothing

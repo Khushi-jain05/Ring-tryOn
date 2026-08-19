@@ -151,6 +151,7 @@ export function NeckDebugOverlay() {
         `length  ${frame.neckLengthMm.toFixed(0)} mm  ${frame.twoCues ? "(two cues)" : "(shoulders only)"}`,
         `shoulders ${frame.shoulderWidthMm.toFixed(0)} mm`,
         `head    turned ${frame.headTurnDeg.toFixed(0)}°`,
+        `pose    ${frame.confidence > 0.5 ? "seen" : "part inferred"} (${frame.confidence.toFixed(2)})`,
         `facing  ${frame.facing.toFixed(2)}`,
         `scale   ${frame.planeScale.toFixed(3)} u/m`,
       ];

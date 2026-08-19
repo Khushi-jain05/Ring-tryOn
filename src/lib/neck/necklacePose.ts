@@ -30,6 +30,14 @@ export type NecklacePose = {
   neckFromHead: boolean;
   /** How far the head is turned relative to the shoulders, in degrees. */
   headTurnDeg: number;
+  /**
+   * Visibility of the least-certain landmark the solve depends on, 0 to 1.
+   *
+   * Low means part of the pose is inferred rather than seen — typical on a profile
+   * view, where the away shoulder is behind the torso. Reported rather than acted on:
+   * refusing to place the piece was worse than placing it from an inferred landmark.
+   */
+  confidence: number;
   /** Shoulder-to-shoulder span, in anchor-plane units. */
   shoulderSpan: number;
   /** Measured shoulder breadth in millimetres, for sizing chain lengths. */
@@ -138,6 +146,15 @@ const MAX_HEAD_TURN_FOR_LENGTH_DEG = 12;
  */
 const NOTCH_FORWARD_OF_SHOULDERS = 0.35;
 
+/**
+ * Below this, the model has no useful opinion about where a landmark is.
+ *
+ * Deliberately low. An occluded shoulder on a profile view still gets a position
+ * inferred from the rest of the body, and using that is much better than hiding the
+ * piece — which is what a 0.5 threshold did at precisely the angle a wearer turns to.
+ */
+const MIN_LANDMARK_VISIBILITY = 0.15;
+
 /** Fallback neck length, used only until a square-on frame has been seen. */
 const NOMINAL_NECK_LENGTH_MM = 150;
 
@@ -219,6 +236,7 @@ export class NecklacePoseSolver {
     neckLengthMm: 150,
     neckFromHead: false,
     headTurnDeg: 0,
+    confidence: 1,
     shoulderSpan: 0.35,
     shoulderWidthMm: NOMINAL_SHOULDER_WIDTH_MM,
     planeScale: 1,
@@ -255,13 +273,30 @@ export class NecklacePoseSolver {
     // A necklace hangs off the shoulder girdle, so a frame that has the face but
     // not both shoulders — someone leaning out of view, or cropped at the chin —
     // has nothing to hang it from. Better to hide the piece than to guess.
+    // Present, not confidently seen.
+    //
+    // This demanded 0.5 visibility on *both* shoulders, and that is why the necklace
+    // disappeared on a profile view: turn far enough and the away shoulder is behind
+    // the torso, its visibility falls below the threshold, and the solve was refused
+    // at exactly the angle someone turns to in order to see how a necklace sits.
+    //
+    // The model still reports a position for an occluded shoulder — inferred from the
+    // rest of the body rather than seen. That is less accurate than a clear view and
+    // far better than nothing, because the quantities it feeds are either latched
+    // already (the neck's size) or heavily smoothed (the anchor). So the gate now only
+    // rejects a landmark the model has effectively no opinion about, and how much of
+    // the pose is inferred is reported instead of being grounds for refusal.
+    let weakest = 1;
     for (const index of REQUIRED_LANDMARKS) {
       const lm = landmarks[index] as { visibility?: number };
-      if (lm.visibility !== undefined && lm.visibility < 0.5) {
+      const v = lm.visibility ?? 1;
+      if (v < weakest) weakest = v;
+      if (v < MIN_LANDMARK_VISIBILITY) {
         this.lastTimestamp = null;
         return null;
       }
     }
+    this.pose.confidence = weakest;
 
     const dt =
       this.lastTimestamp === null ? 1 / 30 : (timestampMs - this.lastTimestamp) / 1000;

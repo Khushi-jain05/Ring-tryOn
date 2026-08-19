@@ -25,6 +25,8 @@ export type NeckDebugFrame = {
   neckLengthMm: number;
   shoulderWidthMm: number;
   headTurnDeg: number;
+  /** Visibility of the least-certain landmark the solve depends on. */
+  confidence: number;
   /** Whether the head-breadth cue was folded into the width estimate. */
   twoCues: boolean;
   planeScale: number;
@@ -46,6 +48,7 @@ export function publishNeckDebug(pose: NecklacePose, dropUnits: number, stamp: n
     neckLengthMm: pose.neckLengthMm,
     shoulderWidthMm: pose.shoulderWidthMm,
     headTurnDeg: pose.headTurnDeg,
+    confidence: pose.confidence,
     twoCues: pose.neckFromHead,
     planeScale: pose.planeScale,
     facing: pose.facing,

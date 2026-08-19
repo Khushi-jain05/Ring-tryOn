@@ -64,6 +64,55 @@ const NECK_PRESS = NECK_OCCLUDER.press;
 /** Scratch, so the frame loop allocates nothing. */
 const NECK_AXIS = new Vector3();
 
+/**
+ * How much of the necklace's own neighbourhood the mask occluder may cover before it
+ * is treated as broken rather than as informative.
+ *
+ * Some covering is exactly the point — that is a hand or a mug in front. But the
+ * wearer's neck is, by construction, the wearer, so a mask that reports most of the
+ * area around the piece as not-wearer is not describing this frame.
+ */
+const MAX_MASK_COVERAGE = 0.7;
+
+/**
+ * Fraction of the area around the piece that the mask calls "not the wearer".
+ *
+ * Sampled on a coarse grid over the neck's neighbourhood rather than the whole frame:
+ * what matters is whether the occluder would swallow the jewellery, not what the mask
+ * says about the far corners of the picture.
+ */
+function maskCoverage(
+  mask: { data: Uint8Array; width: number; height: number },
+  geometry: FrameGeometry,
+  pose: { position: Vector3; neckRadius: number },
+): number {
+  const uv = maskUvTransform(geometry);
+  const aspect = geometry.displayWidth / Math.max(1, geometry.displayHeight);
+  const reach = Math.max(pose.neckRadius, 1e-4) * 1.6;
+
+  const STEPS = 9;
+  let covered = 0;
+  let counted = 0;
+
+  for (let i = 0; i < STEPS; i++) {
+    for (let j = 0; j < STEPS; j++) {
+      const px = pose.position.x + ((i / (STEPS - 1)) * 2 - 1) * reach;
+      const py = pose.position.y + ((j / (STEPS - 1)) * 2 - 1) * reach;
+      // Plane units to the quad's UV, then through the same transform the shader uses.
+      const u = (px / aspect + 0.5) * uv.scaleX + uv.offsetX;
+      const v = (py + 0.5) * uv.scaleY + uv.offsetY;
+      if (u < 0 || u > 1 || v < 0 || v > 1) continue;
+
+      const x = Math.min(mask.width - 1, Math.max(0, Math.round(u * (mask.width - 1))));
+      const y = Math.min(mask.height - 1, Math.max(0, Math.round(v * (mask.height - 1))));
+      counted++;
+      if (mask.data[y * mask.width + x] <= 127) covered++;
+    }
+  }
+
+  return counted > 0 ? covered / counted : 1;
+}
+
 export function TrackedNecklace({
   video,
   metal,
@@ -152,11 +201,16 @@ export function TrackedNecklace({
       const result = landmarker.detectForVideo(video, now);
       pose = solver.solve(result, geometry, options, now);
 
-      // The per-pixel wearer mask. Read before the result is recycled — MediaPipe
-      // reuses its output buffers between frames.
+      // The per-pixel wearer mask, **copied** before the mask is closed.
+      //
+      // getAsUint8Array can hand back a view into WASM memory rather than a copy, and
+      // closing frees it — so keeping the reference and uploading it a few lines later
+      // reads memory that has already been released. What that produces is not a crash
+      // but garbage in the mask, and garbage in the mask hides the necklace completely.
       const raw = result.segmentationMasks?.[0];
       if (raw && state.maskOcclusion) {
-        mask = { data: raw.getAsUint8Array(), width: raw.width, height: raw.height };
+        const bytes = raw.getAsUint8Array();
+        mask = { data: bytes.slice(), width: raw.width, height: raw.height };
       }
       result.segmentationMasks?.forEach((m) => m.close());
     } catch {
@@ -212,7 +266,15 @@ export function TrackedNecklace({
       // Hide the piece wherever something that is not the wearer covers them.
       // Placed just in front of the necklace's nearest point, so it can occlude the
       // piece without being occluded by it.
-      if (mask) {
+      //
+      // Checked before it is trusted, because this occluder's failure mode is the
+      // severe one: it writes depth wherever the mask says "not the wearer", so a
+      // mask that is empty, inverted, or misaligned does not degrade the occlusion —
+      // it deletes the necklace, with nothing in the console to say why. The same
+      // cliff the neck cylinder fell off. `maskCoverage` measures what fraction of
+      // the piece's own neighbourhood the quad would cover, and an implausible
+      // answer means the mask is not describing this frame.
+      if (mask && maskCoverage(mask, geometry, pose) < MAX_MASK_COVERAGE) {
         maskRef.current?.update(
           mask.data,
           mask.width,
