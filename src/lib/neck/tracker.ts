@@ -25,7 +25,7 @@ let landmarkerPromise: Promise<PoseLandmarker> | null = null;
 async function create(): Promise<PoseLandmarker> {
   const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
 
-  const build = (delegate: "GPU" | "CPU") =>
+  const build = (delegate: "GPU" | "CPU", segmentation: boolean) =>
     PoseLandmarker.createFromOptions(vision, {
       baseOptions: { modelAssetPath: POSE_MODEL_PATH, delegate },
       runningMode: "VIDEO",
@@ -33,23 +33,66 @@ async function create(): Promise<PoseLandmarker> {
       minPoseDetectionConfidence: 0.6,
       minPosePresenceConfidence: 0.6,
       minTrackingConfidence: 0.6,
-      // Per-pixel person mask, used to hide the necklace wherever something that
-      // is not the wearer covers their neck. Geometry alone cannot do this: the
-      // scene contains stand-ins for the neck and nothing else, so a hand, a mug
-      // or a phone held in front has no representation to be occluded by, and the
-      // jewellery draws straight over it.
-      //
-      // It costs an extra output tensor per frame, which is the reason it was left
-      // off initially. On the lite model that is a 256x256 byte mask — cheap
-      // enough next to the inference itself.
-      outputSegmentationMasks: true,
+      /**
+       * Per-pixel person mask, used to hide the necklace wherever something that is
+       * not the wearer covers their neck. Geometry alone cannot do that: the scene
+       * holds stand-ins for the neck and nothing else, so a hand or a mug in front
+       * has nothing to be occluded by and the jewellery draws straight over it.
+       */
+      outputSegmentationMasks: segmentation,
     });
 
-  try {
-    return await build("GPU");
-  } catch {
-    return await build("CPU");
+  /**
+   * Four attempts, and the order matters.
+   *
+   * The segmentation head is an *optional* output — whether a given model file and
+   * WASM build support it is not something this code can know in advance. Asking for
+   * it when it is unavailable does not return a landmarker without masks: it throws,
+   * and the whole tracker then fails to load. So the necklace does not lose its
+   * object occlusion, it stops being tracked at all, which presents as the necklace
+   * simply never appearing.
+   *
+   * Occlusion is a refinement and tracking is the feature, so tracking wins: both
+   * delegates are tried with masks first, then both again without. `hasSegmentation`
+   * records which way it went so the renderer can tell the difference between "no
+   * obstruction in front of you" and "this build cannot see obstructions".
+   */
+  const attempts: [delegate: "GPU" | "CPU", segmentation: boolean][] = [
+    ["GPU", true],
+    ["CPU", true],
+    ["GPU", false],
+    ["CPU", false],
+  ];
+
+  let lastError: unknown;
+  for (const [delegate, segmentation] of attempts) {
+    try {
+      const landmarker = await build(delegate, segmentation);
+      hasSegmentation = segmentation;
+      if (!segmentation) {
+        console.warn(
+          "[pose] this build cannot produce segmentation masks; the necklace will " +
+            "track but will not hide behind objects held in front of it.",
+        );
+      }
+      return landmarker;
+    } catch (error) {
+      lastError = error;
+    }
   }
+  throw lastError instanceof Error ? lastError : new Error("pose landmarker unavailable");
+}
+
+/**
+ * Whether the loaded landmarker actually produces segmentation masks.
+ *
+ * Read by the renderer so a build without them degrades to landmark-only occlusion
+ * rather than waiting for masks that will never arrive.
+ */
+let hasSegmentation = false;
+
+export function poseHasSegmentation(): boolean {
+  return hasSegmentation;
 }
 
 export function getPoseLandmarker(): Promise<PoseLandmarker> {

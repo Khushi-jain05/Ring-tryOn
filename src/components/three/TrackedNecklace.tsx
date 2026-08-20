@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { Vector3, type Group, type Mesh } from "three";
 import type { PoseLandmarker } from "@mediapipe/tasks-vision";
-import { getPoseLandmarker } from "@/lib/neck/tracker";
+import { POSE_MODEL_PATH, getPoseLandmarker } from "@/lib/neck/tracker";
 import {
   NecklacePoseSolver,
   type NecklaceSolverOptions,
@@ -154,10 +154,14 @@ export function TrackedNecklace({
       })
       .catch((err: unknown) => {
         if (cancelled) return;
+        // Say what failed and where the file should be. A necklace that never appears
+        // is indistinguishable from one placed wrongly unless the reason is shown.
+        const detail = err instanceof Error ? err.message : String(err);
         setStatus(
           "error",
-          err instanceof Error ? err.message : "Could not load the pose tracking model.",
+          `Could not load the pose tracking model (${POSE_MODEL_PATH}). ${detail} — run "npm run setup:mediapipe" if the file is missing.`,
         );
+        console.error("[pose] model failed to load", err);
       });
     return () => {
       cancelled = true;
@@ -219,7 +223,6 @@ export function TrackedNecklace({
 
     if (pose) {
       missCount.current = 0;
-      group.visible = true;
       group.quaternion.copy(pose.quaternion);
 
       // Same depth treatment as the ring: place the piece at its real Z, then
@@ -229,10 +232,25 @@ export function TrackedNecklace({
       const k = (ANCHOR_DISTANCE - z) / ANCHOR_DISTANCE;
       group.position.set(pose.position.x * k, pose.position.y * k, z);
 
-      // Everything inside the group is authored in millimetres, so the group's
-      // scale is the millimetres-to-plane-units conversion.
+      // Everything inside the group is authored in millimetres, so the group's scale
+      // *is* the millimetres-to-plane-units conversion — and without it the piece is
+      // drawn at a hundred times the size of the screen.
+      //
+      // Which is what happened. The group was made visible before this, and the scale
+      // was skipped when there was no usable pixels-per-metre yet: on the frames before
+      // the scale filter has settled, and permanently if the fit ever fails. A group
+      // left at scale 1 draws a 114 mm collar as 114 plane units on a plane that is one
+      // unit tall, so it is not merely wrong — it is entirely off screen, which looks
+      // exactly like the necklace not working. Nothing is shown until the scale is real.
       const unitsPerMm = pose.planeScale > 0 ? (pose.planeScale / 1000) * k : 0;
-      if (unitsPerMm > 0) group.scale.setScalar(unitsPerMm);
+      if (unitsPerMm <= 0) {
+        group.visible = false;
+        occluder.scale.setScalar(0);
+        maskRef.current?.hide();
+        return;
+      }
+      group.scale.setScalar(unitsPerMm);
+      group.visible = true;
 
       // Measured by the solver from two cues; see NecklacePoseSolver.
       const neckRadiusMm = pose.neckRadiusMm;
@@ -281,6 +299,7 @@ export function TrackedNecklace({
           mask.height,
           maskUvTransform(geometry),
           z + neckRadiusUnits * 1.2,
+          size.width / Math.max(1, size.height),
         );
       } else {
         maskRef.current?.hide();

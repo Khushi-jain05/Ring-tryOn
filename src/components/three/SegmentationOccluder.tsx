@@ -76,6 +76,8 @@ export type SegmentationOccluderHandle = {
     height: number,
     uv: { scaleX: number; offsetX: number; scaleY: number; offsetY: number },
     depth: number,
+    /** Display aspect, so the quad covers exactly the view and no more. */
+    aspect: number,
   ) => void;
   hide: () => void;
 };
@@ -97,7 +99,7 @@ export function SegmentationOccluder({
         if (mesh) mesh.visible = false;
       },
 
-      update(mask, width, height, uv, depth) {
+      update(mask, width, height, uv, depth, aspect) {
         const mesh = meshRef.current;
         const material = materialRef.current;
         if (!mesh || !material) return;
@@ -129,13 +131,19 @@ export function SegmentationOccluder({
         material.uniforms.uUvScale.value = [uv.scaleX, uv.scaleY];
         material.uniforms.uUvOffset.value = [uv.offsetX, uv.offsetY];
 
-        // Sit just in front of the piece, covering the whole view at that depth. The
-        // visible extent shrinks as the plane approaches the camera, so the quad is
-        // scaled to match rather than left at a fixed size.
+        // Sit just in front of the piece, covering **exactly** the view at that depth.
+        //
+        // Exactly matters: the shader reads this quad's own UV, and the transform it is
+        // given maps "0 to 1 across the display" onto the frame. A quad larger than the
+        // view breaks that correspondence, so the mask gets sampled from the wrong place
+        // — it was four units square against a view under one unit tall, which sampled a
+        // small patch near the centre of the frame and treated everything else as out of
+        // range. The visible height at the anchor plane is one unit by construction, and
+        // it shrinks in proportion as the plane approaches the camera.
         const distance = ANCHOR_DISTANCE - depth;
-        const extent = (distance / ANCHOR_DISTANCE) * 4;
+        const viewHeight = distance / ANCHOR_DISTANCE;
         mesh.position.set(0, 0, depth);
-        mesh.scale.set(extent, extent, 1);
+        mesh.scale.set(viewHeight * aspect, viewHeight, 1);
         mesh.visible = true;
       },
     }),

@@ -878,6 +878,51 @@ console.log("\n— The occluder must not eat the jewellery ———————
   checkTrue("the occluder sits inside the chain's path", NECK_OCCLUDER.press < 1);
 }
 
+console.log("\n— Scale is usable from the very first frame ————————");
+
+/**
+ * A pose must never come back without a usable pixels-per-metre.
+ *
+ * The piece's geometry is in millimetres and the renderer's group scale *is* the
+ * conversion, so a pose carrying a zero scale draws a 114 mm collar as 114 plane units
+ * on a plane one unit tall — a hundred times the screen, entirely out of frame. That
+ * reads as the necklace not working at all rather than as a sizing error, which is
+ * exactly how it presented.
+ *
+ * The renderer now refuses to show anything until the scale is real, but that guard
+ * should never have to fire: if the solver hands back a pose it should be drawable.
+ * This asserts the invariant at the point it is created rather than relying on the
+ * consumer to defend itself.
+ */
+{
+  const solver = new NecklacePoseSolver();
+  const result = {
+    landmarks: [project(body, DISTANCE, ASPECT)],
+    worldLandmarks: [body],
+    segmentationMasks: undefined,
+  };
+
+  const first = solver.solve(result as never, geometry, options, 0);
+  checkTrue("the very first frame produces a pose", first !== null);
+  if (first) {
+    console.log(`       frame 1: plane scale ${first.planeScale.toFixed(4)} u/m`);
+    checkTrue("the first frame's scale is already usable", first.planeScale > 0.1);
+    // And the piece it implies has to be a plausible size on screen, not off it.
+    const collarUnits = (first.neckRadiusMm * 2 * first.planeScale) / 1000;
+    console.log(`       frame 1: collar spans ${collarUnits.toFixed(3)} of the display height`);
+    checkTrue("the collar is a fraction of the frame, not a multiple of it", collarUnits < 1);
+  }
+
+  // Every frame after, too — a mid-session frame must not drop to zero either.
+  let worst = Infinity;
+  for (let i = 1; i < 120; i++) {
+    const p = solver.solve(result as never, geometry, options, i * (1000 / 30));
+    if (p) worst = Math.min(worst, p.planeScale);
+  }
+  console.log(`       lowest scale over 120 frames: ${worst.toFixed(4)} u/m`);
+  checkTrue("the scale never drops to zero mid-session", worst > 0.1);
+}
+
 console.log("\n— A shoulder hidden by a turn ——————————————————————");
 
 /**
