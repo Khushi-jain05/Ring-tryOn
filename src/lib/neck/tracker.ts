@@ -30,9 +30,23 @@ async function create(): Promise<PoseLandmarker> {
       baseOptions: { modelAssetPath: POSE_MODEL_PATH, delegate },
       runningMode: "VIDEO",
       numPoses: 1,
-      minPoseDetectionConfidence: 0.6,
-      minPosePresenceConfidence: 0.6,
-      minTrackingConfidence: 0.6,
+      /**
+       * Deliberately permissive, because of how a necklace try-on is actually used.
+       *
+       * The pose model is trained on people with a good deal of body in frame, and it
+       * is being asked here for the opposite: someone sitting close to a webcam with
+       * their head and shoulders filling the picture and no torso, arms or legs to go
+       * on. At 0.6 that framing often fails to register as a person at all — and
+       * without a detection there are no landmarks, so the necklace is not misplaced,
+       * it never appears.
+       *
+       * A necklace needs the shoulder line and the head's direction, both of which are
+       * plainly visible in exactly that framing. Trading detection confidence for
+       * actually detecting is the right way round for this use.
+       */
+      minPoseDetectionConfidence: 0.25,
+      minPosePresenceConfidence: 0.25,
+      minTrackingConfidence: 0.25,
       /**
        * Per-pixel person mask, used to hide the necklace wherever something that is
        * not the wearer covers their neck. Geometry alone cannot do that: the scene

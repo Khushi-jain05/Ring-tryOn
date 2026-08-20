@@ -52,6 +52,20 @@ export type NecklacePose = {
   planar: ReadonlyArray<{ x: number; y: number }>;
 };
 
+/**
+ * Why a frame produced no pose.
+ *
+ * A bare null is the same to the renderer whatever went wrong, so "the necklace is not
+ * visible" covered a model that never loaded, a person the model could not find, and a
+ * shoulder out of frame — three different problems with three different fixes, and no
+ * way to tell them apart from the outside. Naming the reason is what makes that
+ * distinguishable without a debugger.
+ */
+export type NecklaceRejection =
+  | "no-person"
+  | "incomplete-landmarks"
+  | "shoulder-not-visible";
+
 export type NecklaceAnchor = {
   /**
    * Trim on the piece's own length, 1 being as designed.
@@ -227,6 +241,13 @@ export class NecklacePoseSolver {
   /** Per-landmark visibility from the most recent frame. */
   private visibility: number[] = [];
 
+  /** Why the last frame produced nothing, for the renderer to report. */
+  private rejection: NecklaceRejection | null = null;
+
+  get lastRejection(): NecklaceRejection | null {
+    return this.rejection;
+  }
+
   readonly pose: NecklacePose = {
     position: new Vector3(),
     quaternion: new Quaternion(),
@@ -265,7 +286,13 @@ export class NecklacePoseSolver {
   ): NecklacePose | null {
     const landmarks = result.landmarks?.[0];
     const world = result.worldLandmarks?.[0];
-    if (!landmarks || !world || landmarks.length < POSE_LANDMARK_COUNT) {
+    if (!landmarks || !world) {
+      this.rejection = "no-person";
+      this.lastTimestamp = null;
+      return null;
+    }
+    if (landmarks.length < POSE_LANDMARK_COUNT) {
+      this.rejection = "incomplete-landmarks";
       this.lastTimestamp = null;
       return null;
     }
@@ -292,6 +319,7 @@ export class NecklacePoseSolver {
       const v = lm.visibility ?? 1;
       if (v < weakest) weakest = v;
       if (v < MIN_LANDMARK_VISIBILITY) {
+        this.rejection = "shoulder-not-visible";
         this.lastTimestamp = null;
         return null;
       }
@@ -320,6 +348,7 @@ export class NecklacePoseSolver {
       this.visibility[i] = (landmarks[i] as { visibility?: number }).visibility ?? 1;
     }
 
+    this.rejection = null;
     this.project(landmarks, geometry);
     this.smooth(dt, world, options);
 

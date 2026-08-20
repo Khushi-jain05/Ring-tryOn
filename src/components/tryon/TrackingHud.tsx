@@ -3,24 +3,50 @@
 import { useEffect, useState } from "react";
 import { useTryOnStore, type TrackingStatus } from "@/lib/store/tryon";
 
-const STATUS_COPY: Record<TrackingStatus, { label: string; tone: string } | null> = {
+const TONE: Record<TrackingStatus, string | null> = {
   idle: null,
   denied: null,
-  error: null,
-  "requesting-camera": { label: "Waiting for camera", tone: "bg-neutral-500" },
-  "loading-model": { label: "Loading hand tracking", tone: "bg-amber-300" },
-  searching: { label: "Show your hand to the camera", tone: "bg-amber-300" },
-  tracking: { label: "Tracking", tone: "bg-emerald-400" },
+  error: "bg-red-400",
+  "requesting-camera": "bg-neutral-500",
+  "loading-model": "bg-amber-300",
+  searching: "bg-amber-300",
+  tracking: "bg-emerald-400",
 };
+
+/**
+ * What to say while waiting, which depends on what is being tracked.
+ *
+ * The copy here was fixed and hand-specific — "Show your hand to the camera" — so in
+ * necklace mode it asked for the wrong body part, and any detail the tracker had
+ * about *why* it was waiting was thrown away. That mattered more than it sounds: a
+ * necklace that never appears has several unrelated causes, and the only thing
+ * separating them was a message this component was discarding.
+ */
+function waitingCopy(status: TrackingStatus, mode: "ring" | "necklace", detail?: string) {
+  if (detail) return detail;
+  if (status === "loading-model") {
+    return mode === "necklace" ? "Loading pose tracking" : "Loading hand tracking";
+  }
+  if (status === "searching") {
+    return mode === "necklace"
+      ? "Sit back until your head and both shoulders are in frame"
+      : "Show your hand to the camera";
+  }
+  if (status === "requesting-camera") return "Waiting for camera";
+  return "Tracking";
+}
 
 export function TrackingHud({ onCapture }: { onCapture: () => string | null }) {
   const status = useTryOnStore((s) => s.status);
+  const detail = useTryOnStore((s) => s.errorMessage);
+  const mode = useTryOnStore((s) => s.mode);
   const fps = useTryOnStore((s) => s.fps);
   const showDiagnostics = useTryOnStore((s) => s.showDiagnostics);
   const [shot, setShot] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
 
-  const copy = STATUS_COPY[status];
+  const tone = TONE[status];
+  const label = waitingCopy(status, mode, status === "tracking" ? undefined : detail ?? undefined);
 
   useEffect(() => {
     if (!flash) return;
@@ -39,10 +65,10 @@ export function TrackingHud({ onCapture }: { onCapture: () => string | null }) {
     <>
       {flash && <div className="pointer-events-none absolute inset-0 z-30 bg-white/80" />}
 
-      {copy && (
-        <div className="pointer-events-none absolute left-4 top-4 z-20 flex items-center gap-2 rounded-full bg-neutral-950/70 px-3 py-1.5 text-xs text-neutral-200 backdrop-blur">
-          <span className={`size-1.5 rounded-full ${copy.tone} ${status === "tracking" ? "" : "animate-pulse"}`} />
-          {copy.label}
+      {tone && (
+        <div className="pointer-events-none absolute left-4 top-4 z-20 flex max-w-[85%] items-center gap-2 rounded-full bg-neutral-950/70 px-3 py-1.5 text-xs text-neutral-200 backdrop-blur">
+          <span className={`size-1.5 shrink-0 rounded-full ${tone} ${status === "tracking" ? "" : "animate-pulse"}`} />
+          {label}
           {showDiagnostics && status === "tracking" && (
             <span className="ml-1 tabular-nums text-neutral-500">{fps} fps</span>
           )}

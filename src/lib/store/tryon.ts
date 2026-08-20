@@ -86,8 +86,12 @@ type TryOnState = Persisted & {
   mirrored: boolean;
   flipGem: boolean;
   /**
-   * Hide the necklace where something that is not the wearer covers them, using
-   * the pose model's per-pixel mask. Costs an extra output tensor per frame.
+   * Hide the necklace where something that is not the wearer covers them, using the
+   * pose model's per-pixel mask.
+   *
+   * Off by default. It is the only thing here that can hide the piece *entirely* if
+   * the mask is wrong — it writes depth wherever the mask says not-the-wearer — and
+   * it has already done so once. Basic visibility should not depend on a refinement.
    */
   maskOcclusion: boolean;
   /** Fixed magnification of the centre of the frame, 1 being uncropped. */
@@ -170,7 +174,7 @@ export const useTryOnStore = create<TryOnState>()(
       neckReading: null,
       mirrored: true,
       flipGem: false,
-      maskOcclusion: true,
+      maskOcclusion: false,
       zoom: 1.7,
       settingFacesCamera: false,
       usePixelProbe: false,

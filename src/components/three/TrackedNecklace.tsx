@@ -311,11 +311,24 @@ export function TrackedNecklace({
 
       if (state.status !== "tracking") setStatus("tracking");
     } else if (++missCount.current > MISS_GRACE_FRAMES) {
+      // Report which gate closed. "Not visible" covered three unrelated problems and
+      // there was no way to tell them apart without a debugger.
+      const why = solver.lastRejection;
+      if (state.status !== "error") {
+        setStatus(
+          "searching",
+          why === "no-person"
+            ? "Looking for you — sit back until your head and both shoulders are in frame."
+            : why === "shoulder-not-visible"
+              ? "One shoulder is out of frame — square up to the camera a little."
+              : undefined,
+        );
+      }
+
       group.visible = false;
       occluder.scale.setScalar(0);
       maskRef.current?.hide();
       clearNeckDebug();
-      if (state.status === "tracking") setStatus("searching");
     }
 
     const window = fpsWindow.current;
