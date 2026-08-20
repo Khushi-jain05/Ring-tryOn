@@ -18,6 +18,7 @@ import {
   buildADCollar,
   collarDropFactor,
 } from "../src/lib/jewellery/americanDiamond";
+import { seatOffsetMm } from "../src/lib/jewellery/catalog";
 
 let failures = 0;
 
@@ -328,6 +329,26 @@ console.log("\n— American diamond collar ————————————�
   const bandBottom = -spec.frontDipMm - spec.bandWidthMm / 2;
   console.log(`       band bottom ${bandBottom.toFixed(1)} mm, lowest point ${built.lowestMm.toFixed(1)} mm`);
   checkTrue("the drops hang below the band", built.lowestMm < bandBottom);
+
+  // Seated, not hung.
+  //
+  // The solver puts the anchor at the base of the neck and a piece is modelled hanging
+  // from its own origin — so seating the origin on the anchor leaves the visible band
+  // below it. This collar's band sits 16 mm under its origin, and that is exactly the
+  // offset a wearer was correcting by hand every session. The renderer lifts the piece
+  // by `seatOffsetMm`, and this asserts the two agree: lift the band by that amount and
+  // it should land on the anchor, not under it.
+  {
+    const bandFront = built.mainStones[Math.floor(built.mainStones.length / 2)].position[1];
+    const lift = seatOffsetMm({ spec } as never);
+    const seated = bandFront + lift;
+    console.log(
+      `       band front sits ${bandFront.toFixed(1)} mm below the origin; lifting ${lift.toFixed(1)} mm seats it at ${seated.toFixed(1)} mm`,
+    );
+    check("the lift puts the band on the neck's anchor", seated, 0, 1.5);
+    // And the drops must still hang below it afterwards, not get pushed up onto the neck.
+    checkTrue("the drops still hang below the anchor once seated", built.lowestMm + lift < 0);
+  }
 
   // A collar sits on the neck; it must not reach anywhere near a pendant's length.
   const drop = collarDropFactor(spec, NECK_MM);

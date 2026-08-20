@@ -13,7 +13,7 @@ import { ANCHOR_DISTANCE, maskUvTransform, type FrameGeometry } from "@/lib/hand
 import { fixedFraming } from "@/lib/hand/framing";
 import { useTryOnStore } from "@/lib/store/tryon";
 import type { MetalId } from "@/lib/rings/types";
-import { dropFactorFor, type Necklace } from "@/lib/jewellery/catalog";
+import { dropFactorFor, seatOffsetMm, type Necklace } from "@/lib/jewellery/catalog";
 import { Necklace3D } from "./Necklace3D";
 import { NeckOccluder } from "./NeckOccluder";
 import { NeckContactShadow } from "./NeckContactShadow";
@@ -65,6 +65,7 @@ const NECK_PRESS = NECK_OCCLUDER.press;
 
 /** Scratch, so the frame loop allocates nothing. */
 const NECK_AXIS = new Vector3();
+const ANCHOR_POS = new Vector3();
 
 /**
  * How much of the necklace's own neighbourhood the mask occluder may cover before it
@@ -235,7 +236,10 @@ export function TrackedNecklace({
       // the ones the solver measured. See TrackedRing for the derivation.
       const z = pose.anchorDepth;
       const k = (ANCHOR_DISTANCE - z) / ANCHOR_DISTANCE;
-      group.position.set(pose.position.x * k, pose.position.y * k, z);
+      // The neck's own anchor. The occluder and the contact shadow stand in for the
+      // neck, so they belong here and must not move with the piece.
+      ANCHOR_POS.set(pose.position.x * k, pose.position.y * k, z);
+      group.position.copy(ANCHOR_POS);
 
       // Everything inside the group is authored in millimetres, so the group's scale
       // *is* the millimetres-to-plane-units conversion — and without it the piece is
@@ -255,6 +259,18 @@ export function TrackedNecklace({
         return;
       }
       group.scale.setScalar(unitsPerMm);
+
+      // Lift the piece so the band that rests on the neck actually rests on it.
+      //
+      // A necklace is modelled hanging from its own origin, so seating that origin on
+      // the neck's anchor left the visible band below it — 16 mm low on this collar,
+      // which is precisely the offset the wearer was correcting by hand every session.
+      // Expressed in millimetres and scaled here, so it adapts to whoever is wearing it
+      // instead of being a fixed nudge that is right for one neck.
+      group.position.addScaledVector(
+        NECK_AXIS.set(0, 1, 0).applyQuaternion(group.quaternion),
+        seatOffsetMm(necklace) * unitsPerMm,
+      );
       group.visible = true;
 
       // Measured by the solver from two cues; see NecklacePoseSolver.
@@ -280,7 +296,7 @@ export function TrackedNecklace({
       // Offset up the neck's own axis, not the screen's — a tilted head has to
       // carry the occluder with it.
       occluder.position
-        .copy(group.position)
+        .copy(ANCHOR_POS)
         .addScaledVector(
           NECK_AXIS.set(0, 1, 0).applyQuaternion(group.quaternion),
           neckRadiusUnits * NECK_RISE,
@@ -291,12 +307,13 @@ export function TrackedNecklace({
       // little taller than the collar is.
       const shadow = shadowRef.current;
       if (shadow) {
-        const dip = necklace.spec.frontDipMm * unitsPerMm;
+        // The shadow marks where the band rests, which is now the anchor itself.
+        const dip = 0;
         const span = (necklace.spec.bandWidthMm * 3.2) * unitsPerMm;
         shadow.quaternion.copy(group.quaternion);
         shadow.scale.set(neckRadiusUnits, span, neckRadiusUnits * NECK_OCCLUDER.flatten);
         shadow.position
-          .copy(group.position)
+          .copy(ANCHOR_POS)
           .addScaledVector(
             NECK_AXIS.set(0, 1, 0).applyQuaternion(group.quaternion),
             -dip,
