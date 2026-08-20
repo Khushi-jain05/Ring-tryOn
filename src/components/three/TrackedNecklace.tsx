@@ -16,12 +16,14 @@ import type { MetalId } from "@/lib/rings/types";
 import { dropFactorFor, type Necklace } from "@/lib/jewellery/catalog";
 import { Necklace3D } from "./Necklace3D";
 import { NeckOccluder } from "./NeckOccluder";
+import { NeckContactShadow } from "./NeckContactShadow";
 import {
   SegmentationOccluder,
   type SegmentationOccluderHandle,
 } from "./SegmentationOccluder";
 import { NECK_OCCLUDER } from "@/lib/jewellery/fit";
 import { clearNeckDebug, publishNeckDebug } from "@/lib/neck/debugBus";
+import { RoomLightProbe } from "@/lib/neck/roomLight";
 
 /** Frames the upper body may go missing before the piece is hidden. */
 const MISS_GRACE_FRAMES = 8;
@@ -124,9 +126,12 @@ export function TrackedNecklace({
 }) {
   const groupRef = useRef<Group>(null);
   const occluderRef = useRef<Mesh>(null);
+  const shadowRef = useRef<Mesh>(null);
   const maskRef = useRef<SegmentationOccluderHandle | null>(null);
   const landmarkerRef = useRef<PoseLandmarker | null>(null);
   const solver = useMemo(() => new NecklacePoseSolver(), []);
+  const roomProbe = useMemo(() => new RoomLightProbe(), []);
+  const probeTick = useRef(0);
   const missCount = useRef(0);
   const lastVideoTime = useRef(-1);
   const fpsWindow = useRef({ frames: 0, since: 0 });
@@ -139,7 +144,7 @@ export function TrackedNecklace({
   const setNeckSize = useTryOnStore((s) => s.setNeckSizeMm);
   const setNeckReading = useTryOnStore((s) => s.setNeckReading);
 
-  const { size } = useThree();
+  const { size, scene } = useThree();
   const setStatus = useTryOnStore((s) => s.setStatus);
   const setFps = useTryOnStore((s) => s.setFps);
 
@@ -281,6 +286,24 @@ export function TrackedNecklace({
           neckRadiusUnits * NECK_RISE,
         );
 
+      // The contact shadow follows the piece rather than the neck's full length: it
+      // marks where metal rests on skin, so it is centred on the collar and only a
+      // little taller than the collar is.
+      const shadow = shadowRef.current;
+      if (shadow) {
+        const dip = necklace.spec.frontDipMm * unitsPerMm;
+        const span = (necklace.spec.bandWidthMm * 3.2) * unitsPerMm;
+        shadow.quaternion.copy(group.quaternion);
+        shadow.scale.set(neckRadiusUnits, span, neckRadiusUnits * NECK_OCCLUDER.flatten);
+        shadow.position
+          .copy(group.position)
+          .addScaledVector(
+            NECK_AXIS.set(0, 1, 0).applyQuaternion(group.quaternion),
+            -dip,
+          );
+        shadow.visible = true;
+      }
+
       // Hide the piece wherever something that is not the wearer covers them.
       // Placed just in front of the necklace's nearest point, so it can occlude the
       // piece without being occluded by it.
@@ -305,6 +328,31 @@ export function TrackedNecklace({
         maskRef.current?.hide();
       }
 
+      // Drift the piece's lighting toward the room, a few times a second rather than
+      // every frame. A piece lit by a studio the wearer is not standing in reads as
+      // pasted on, and mismatched colour temperature is among the first things the eye
+      // picks up.
+      if (state.adaptLighting && (probeTick.current++ & 7) === 0) {
+        const room = roomProbe.sample(video);
+        if (room) {
+          scene.traverse((object) => {
+            const light = object as unknown as {
+              isDirectionalLight?: boolean;
+              isAmbientLight?: boolean;
+              color?: { setRGB: (r: number, g: number, b: number) => void; toArray: () => number[] };
+              userData: Record<string, unknown>;
+            };
+            if (!light.isDirectionalLight && !light.isAmbientLight) return;
+            if (!light.color) return;
+            // The authored colour is remembered once, so repeated sampling tints the
+            // original rather than compounding on the previous frame's tint — which
+            // would drift the piece further from white every few frames.
+            const base = (light.userData.baseColor ??= light.color.toArray()) as number[];
+            light.color.setRGB(base[0] * room.r, base[1] * room.g, base[2] * room.b);
+          });
+        }
+      }
+
       if (state.showDiagnostics) {
         publishNeckDebug(pose, dropFactorFor(necklace, neckRadiusMm) * unitsPerMm * neckRadiusMm, now);
       }
@@ -327,6 +375,7 @@ export function TrackedNecklace({
 
       group.visible = false;
       occluder.scale.setScalar(0);
+      if (shadowRef.current) shadowRef.current.visible = false;
       maskRef.current?.hide();
       clearNeckDebug();
     }
@@ -344,6 +393,7 @@ export function TrackedNecklace({
   return (
     <>
       <NeckOccluder ref={occluderRef} />
+      <NeckContactShadow ref={shadowRef} />
       <SegmentationOccluder ref={maskRef} />
       <group ref={groupRef} visible={false}>
         <Necklace3D

@@ -399,6 +399,14 @@ export function TryOnStudio() {
                 />
                 {isNecklace && (
                   <Toggle
+                    label="Match my room's light"
+                    hint="Tints the piece toward the light the camera can see. Off, it is lit by a fixed studio, which is one of the two reasons rendered jewellery looks pasted on."
+                    checked={store.adaptLighting}
+                    onChange={store.toggleAdaptLighting}
+                  />
+                )}
+                {isNecklace && (
+                  <Toggle
                     label="Hide behind objects in front"
                     hint="Uses a per-pixel outline of you, so a hand or a cup held up covers the necklace. Your own hand still counts as you, so it will not hide it."
                     checked={store.maskOcclusion}

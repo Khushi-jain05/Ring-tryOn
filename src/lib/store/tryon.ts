@@ -94,6 +94,14 @@ type TryOnState = Persisted & {
    * it has already done so once. Basic visibility should not depend on a refinement.
    */
   maskOcclusion: boolean;
+  /**
+   * Drift the piece's lighting toward the room the camera can see.
+   *
+   * On by default. A piece lit by a studio the wearer is not standing in is one of the
+   * two reasons rendered jewellery reads as a sticker; the other is the absence of a
+   * contact shadow where it rests on skin.
+   */
+  adaptLighting: boolean;
   /** Fixed magnification of the centre of the frame, 1 being uncropped. */
   zoom: number;
   /**
@@ -142,6 +150,7 @@ type TryOnState = Persisted & {
   toggleFlipGem: () => void;
   setZoom: (zoom: number) => void;
   toggleMaskOcclusion: () => void;
+  toggleAdaptLighting: () => void;
   toggleSettingFacesCamera: () => void;
   togglePixelProbe: () => void;
   toggleDiagnostics: () => void;
@@ -175,6 +184,7 @@ export const useTryOnStore = create<TryOnState>()(
       mirrored: true,
       flipGem: false,
       maskOcclusion: false,
+      adaptLighting: true,
       zoom: 1.7,
       settingFacesCamera: false,
       usePixelProbe: false,
@@ -294,6 +304,8 @@ export const useTryOnStore = create<TryOnState>()(
       setZoom: (zoom) => set({ zoom }),
       toggleMaskOcclusion: () =>
         set((s) => ({ maskOcclusion: !s.maskOcclusion })),
+      toggleAdaptLighting: () =>
+        set((s) => ({ adaptLighting: !s.adaptLighting })),
       toggleSettingFacesCamera: () =>
         set((s) => ({ settingFacesCamera: !s.settingFacesCamera })),
       togglePixelProbe: () =>

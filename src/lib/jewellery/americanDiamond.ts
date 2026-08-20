@@ -62,7 +62,17 @@ export type ADSpec = {
  * A delicate version of this design would be invisible.
  */
 export const AD_COLLAR: ADSpec = {
-  collarSpanDeg: 208,
+  /**
+   * How far the set part reaches round, and it wants to be generous.
+   *
+   * At 208 degrees the decorated arc stopped just past the sides of the neck, which
+   * leaves its two ends squarely in view — and a piece whose ends you can both see at
+   * once reads as an arc laid on the skin rather than as something that continues
+   * round out of sight. Carrying it to 248 puts each end behind the curve of the neck,
+   * where the occluder takes it, so the collar leaves the picture instead of stopping
+   * in it.
+   */
+  collarSpanDeg: 248,
   bandWidthMm: 12,
   railWireMm: 0.95,
   mainStoneMm: 4.4,
